@@ -30,6 +30,9 @@ services:
       - GATEWAY_PORT=3000
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      # Credenciales del superadmin
+      - SUPERADMIN_USER=${SUPERADMIN_USER}
+      - SUPERADMIN_PASS=${SUPERADMIN_PASS}
       # Dentro de Docker, los servicios se llaman por su nombre de servicio
       - TRABUNDA_API_PORT=3001
       - RUTAS_API_PORT=3002
