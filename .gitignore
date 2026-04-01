@@ -1,0 +1,25 @@
+# Variables de entorno (Seguridad)
+.env
+.env.*
+!.env.example
+
+#Node
+node_modules/
+**/node_modules/
+
+# Compilación
+dist/
+build/
+*.log
+
+#Logs
+npm-debug.log*
+
+apps/gateway/node_modules/
+
+# IDEs / Editores
+.vscode/
+.idea/
+.claude/
+
+DS_Store

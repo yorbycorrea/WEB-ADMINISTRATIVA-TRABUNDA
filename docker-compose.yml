@@ -1,0 +1,99 @@
+services:
+
+  # ── Nginx principal: único punto de entrada ───────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: admin-suite-nginx
+    ports:
+      - "80:80"          # expone el puerto 80 al exterior
+    volumes:
+      # Montamos la configuración de Nginx
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - gateway
+      - admin-web
+    networks:
+      - admin-net
+    restart: unless-stopped
+
+  # ── Gateway: API central con autenticación JWT ────────────────────────────
+  gateway:
+    build:
+      context: ./apps/gateway    # dónde está el Dockerfile
+      dockerfile: Dockerfile
+    container_name: admin-suite-gateway
+    # NO exponemos el puerto al exterior — solo Nginx puede hablar con él
+    expose:
+      - "3000"
+    environment:
+      # Las variables del .env se inyectan aquí
+      - GATEWAY_PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      # Dentro de Docker, los servicios se llaman por su nombre de servicio
+      - TRABUNDA_API_PORT=3001
+      - RUTAS_API_PORT=3002
+      # En Docker los servicios se llaman por nombre, no localhost
+      - TRABUNDA_API_URL=http://trabunda-api:3001
+      - RUTAS_API_URL=http://rutas-api:3002
+      # URLs de los backends reales de Trabunda y Rutas
+      - TRABUNDA_BACKEND_URL=${TRABUNDA_BACKEND_URL}
+      - TRABUNDA_ADMIN_USER=${TRABUNDA_ADMIN_USER}
+      - TRABUNDA_ADMIN_PASS=${TRABUNDA_ADMIN_PASS}
+      - RUTAS_BACKEND_URL=${RUTAS_BACKEND_URL}
+      - RUTAS_ADMIN_USER=${RUTAS_ADMIN_USER}
+      - RUTAS_ADMIN_PASS=${RUTAS_ADMIN_PASS}
+    depends_on:
+      - trabunda-api
+      - rutas-api
+    networks:
+      - admin-net
+    restart: unless-stopped
+
+  # ── Trabunda API stub ─────────────────────────────────────────────────────
+  trabunda-api:
+    build:
+      context: ./apps/trabunda-api
+      dockerfile: Dockerfile
+    container_name: admin-suite-trabunda-api
+    expose:
+      - "3001"
+    environment:
+      - TRABUNDA_API_PORT=3001
+    networks:
+      - admin-net
+    restart: unless-stopped
+
+  # ── Rutas API stub ────────────────────────────────────────────────────────
+  rutas-api:
+    build:
+      context: ./apps/rutas-api
+      dockerfile: Dockerfile
+    container_name: admin-suite-rutas-api
+    expose:
+      - "3002"
+    environment:
+      - RUTAS_API_PORT=3002
+    networks:
+      - admin-net
+    restart: unless-stopped
+
+  # ── Frontend React (compilado y servido por Nginx) ────────────────────────
+  admin-web:
+    build:
+      context: ./apps/admin-web/admin-web
+      dockerfile: Dockerfile
+    container_name: admin-suite-web
+    expose:
+      - "80"
+    networks:
+      - admin-net
+    restart: unless-stopped
+
+# ── Red interna ───────────────────────────────────────────────────────────────
+# Todos los contenedores están en la misma red privada.
+# Se comunican por nombre de servicio (ej: "gateway", "trabunda-api").
+# Nadie de afuera puede acceder directamente a estos contenedores.
+networks:
+  admin-net:
+    driver: bridge

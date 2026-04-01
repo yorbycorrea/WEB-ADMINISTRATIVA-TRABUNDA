@@ -1,0 +1,26 @@
+{
+  "name": "admin-suite",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Este repositorio es un monorepo para una **web administrativa** que controla múltiples apps (TRABUNDA, rutas trabunda, futuras apps) en un mismo servidor.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node apps/gateway/src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
