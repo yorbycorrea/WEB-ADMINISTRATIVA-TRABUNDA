@@ -53,6 +53,15 @@ export function apiGetTrabundaDashboard() {
   return apiFetch('/dashboard/trabunda');
 }
 
+// Reportes de Trabunda con filtros opcionales
+// fecha: 'YYYY-MM-DD', tipo: 'APOYO_HORAS' | 'SANEAMIENTO' | etc.
+export function apiGetTrabundaReportes({ fecha, tipo, limit = 200, offset = 0 } = {}) {
+  const params = new URLSearchParams({ limit, offset });
+  if (fecha) params.set('fecha', fecha);
+  if (tipo)  params.set('tipo', tipo);
+  return apiFetch(`/dashboard/trabunda/reportes?${params}`);
+}
+
 export function apiGetRutasDashboard() {
   return apiFetch('/dashboard/rutas');
 }

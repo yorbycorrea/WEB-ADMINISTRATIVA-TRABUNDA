@@ -238,6 +238,35 @@ app.get("/dashboard/trabunda", verifyToken, requirePermission("trabunda"), async
 });
 
 
+// ─── REPORTES DE TRABUNDA (requiere permiso "trabunda") ──────────────────────
+// Permite filtrar por fecha y tipo. Soporta paginación básica.
+app.get("/dashboard/trabunda/reportes", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Trabunda no configurado en .env" });
+  }
+  try {
+    const fecha  = req.query.fecha  || new Date().toISOString().split("T")[0];
+    const tipo   = req.query.tipo   || "";
+    const limit  = parseInt(req.query.limit)  || 200;
+    const offset = parseInt(req.query.offset) || 0;
+
+    let url = `${base}/reportes?fecha=${fecha}&limit=${limit}&offset=${offset}`;
+    if (tipo) url += `&tipo=${tipo}`;
+
+    const data     = await fetchService(getTrabundaToken, "trabunda", url);
+    const reportes = data?.reportes ?? data?.data ?? [];
+
+    // Si el backend soporta paginación real, usa su total; si no, usamos el largo del array
+    const total = data?.total ?? data?.count ?? reportes.length;
+
+    res.json({ reportes, total, fecha, tipo });
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener reportes de Trabunda", detail: err.message });
+  }
+});
+
+
 // ─── DASHBOARD DE RUTAS (requiere permiso "rutas") ────────────────────────────
 app.get("/dashboard/rutas", verifyToken, requirePermission("rutas"), async (_req, res) => {
   const base = process.env.RUTAS_BACKEND_URL;
