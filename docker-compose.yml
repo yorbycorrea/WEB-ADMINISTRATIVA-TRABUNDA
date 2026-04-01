@@ -5,9 +5,8 @@ services:
     image: nginx:alpine
     container_name: admin-suite-nginx
     ports:
-      - "80:80"          # expone el puerto 80 al exterior
+      - "80:80"
     volumes:
-      # Montamos la configuración de Nginx
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - gateway
@@ -16,30 +15,52 @@ services:
       - admin-net
     restart: unless-stopped
 
+  # ── PostgreSQL: base de datos del Admin Suite ─────────────────────────────
+  # Guarda usuarios, estadísticas y todo lo que se agregue a futuro.
+  postgres:
+    image: postgres:16-alpine
+    container_name: admin-suite-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Los datos de la BD persisten en este volumen aunque se haga docker-compose down
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - admin-net
+    restart: unless-stopped
+    # Healthcheck: Docker espera a que Postgres esté listo antes de arrancar el gateway
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # ── Gateway: API central con autenticación JWT ────────────────────────────
   gateway:
     build:
-      context: ./apps/gateway    # dónde está el Dockerfile
+      context: ./apps/gateway
       dockerfile: Dockerfile
     container_name: admin-suite-gateway
-    # NO exponemos el puerto al exterior — solo Nginx puede hablar con él
     expose:
       - "3000"
     environment:
-      # Las variables del .env se inyectan aquí
       - GATEWAY_PORT=3000
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
-      # Credenciales del superadmin
       - SUPERADMIN_USER=${SUPERADMIN_USER}
       - SUPERADMIN_PASS=${SUPERADMIN_PASS}
-      # Dentro de Docker, los servicios se llaman por su nombre de servicio
+      # Conexión a PostgreSQL
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # APIs internas
       - TRABUNDA_API_PORT=3001
       - RUTAS_API_PORT=3002
-      # En Docker los servicios se llaman por nombre, no localhost
       - TRABUNDA_API_URL=http://trabunda-api:3001
       - RUTAS_API_URL=http://rutas-api:3002
-      # URLs de los backends reales de Trabunda y Rutas
+      # Backends reales
       - TRABUNDA_BACKEND_URL=${TRABUNDA_BACKEND_URL}
       - TRABUNDA_ADMIN_USER=${TRABUNDA_ADMIN_USER}
       - TRABUNDA_ADMIN_PASS=${TRABUNDA_ADMIN_PASS}
@@ -47,8 +68,12 @@ services:
       - RUTAS_ADMIN_USER=${RUTAS_ADMIN_USER}
       - RUTAS_ADMIN_PASS=${RUTAS_ADMIN_PASS}
     depends_on:
-      - trabunda-api
-      - rutas-api
+      postgres:
+        condition: service_healthy   # espera a que postgres esté listo
+      trabunda-api:
+        condition: service_started
+      rutas-api:
+        condition: service_started
     networks:
       - admin-net
     restart: unless-stopped
@@ -94,9 +119,11 @@ services:
     restart: unless-stopped
 
 # ── Red interna ───────────────────────────────────────────────────────────────
-# Todos los contenedores están en la misma red privada.
-# Se comunican por nombre de servicio (ej: "gateway", "trabunda-api").
-# Nadie de afuera puede acceder directamente a estos contenedores.
 networks:
   admin-net:
     driver: bridge
+
+# ── Volúmenes persistentes ────────────────────────────────────────────────────
+# Sobreviven a docker-compose down. Solo se borran con docker-compose down -v
+volumes:
+  postgres-data:   # datos de PostgreSQL

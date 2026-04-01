@@ -1,124 +1,110 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  userStore.js
-//  Gestiona los usuarios del Admin Suite.
-//  Los guarda en un archivo JSON local (no necesita base de datos propia).
-//  Las contraseñas NUNCA se guardan en texto plano — siempre como hash bcrypt.
+//  Todas las operaciones de usuarios contra PostgreSQL.
+//  Reemplaza la versión anterior que usaba un archivo JSON.
+//
+//  Diferencias clave con el JSON:
+//  - Las operaciones son async (PostgreSQL es I/O de red, no de disco local)
+//  - Las contraseñas siguen hasheadas con bcrypt — eso no cambia
+//  - La columna "display_name" en SQL = "displayName" en JS (snake_case → camelCase)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { readFileSync, writeFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
 import bcrypt from "bcryptjs";
+import { query } from "../db/index.js";
 
-// Resolvemos la ruta absoluta al archivo users.json
-// __dirname no existe en ES Modules, por eso usamos este patrón
-const __filename = fileURLToPath(import.meta.url);
-const __dir      = dirname(__filename);
-const USERS_FILE = join(__dir, "../data/users.json");
-
-// ─── Lectura y escritura del archivo ─────────────────────────────────────────
-
-function readUsers() {
-  try {
-    return JSON.parse(readFileSync(USERS_FILE, "utf8"));
-  } catch {
-    return [];
-  }
-}
-
-function writeUsers(users) {
-  writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+// Convierte una fila de PostgreSQL (snake_case) al formato que espera el frontend
+function toUser(row) {
+  return {
+    id:          row.id,
+    username:    row.username,
+    displayName: row.display_name,
+    permissions: row.permissions ?? [],
+    createdAt:   row.created_at,
+  };
 }
 
 // ─── Operaciones públicas ─────────────────────────────────────────────────────
 
 /**
  * Devuelve todos los usuarios sin el campo password.
- * Nunca exponemos el hash al frontend.
  */
-export function getAllUsers() {
-  return readUsers().map(({ password: _p, ...rest }) => rest);
+export async function getAllUsers() {
+  const { rows } = await query(
+    "SELECT id, username, display_name, permissions, created_at FROM users ORDER BY created_at ASC"
+  );
+  return rows.map(toUser);
 }
 
 /**
- * Busca un usuario por username y verifica su contraseña.
- * Devuelve el usuario (sin password) si es correcto, null si no.
+ * Verifica credenciales. Devuelve el usuario (sin password) o null.
  */
 export async function verifyUser(username, password) {
-  const users = readUsers();
-  const user  = users.find(u => u.username === username);
-  if (!user) return null;
+  const { rows } = await query(
+    "SELECT * FROM users WHERE username = $1",
+    [username]
+  );
+  if (!rows.length) return null;
 
-  // bcrypt.compare compara el texto plano con el hash guardado
-  const ok = await bcrypt.compare(password, user.password);
+  const ok = await bcrypt.compare(password, rows[0].password);
   if (!ok) return null;
 
-  const { password: _p, ...safeUser } = user;
-  return safeUser;
+  return toUser(rows[0]);
 }
 
 /**
- * Crea un nuevo usuario.
- * Valida que el username no exista y hashea la contraseña.
- *
- * permissions: array de strings — qué páginas puede ver.
- * Valores posibles: "overview", "trabunda", "rutas"
+ * Crea un nuevo usuario con contraseña hasheada.
  */
 export async function createUser({ username, password, displayName, permissions }) {
-  const users = readUsers();
-
-  if (users.find(u => u.username === username)) {
-    throw new Error(`El usuario "${username}" ya existe`);
-  }
-
-  // bcrypt.hash convierte la contraseña en un hash seguro.
-  // El "10" es el número de rondas de hashing (más alto = más seguro pero más lento)
   const hashedPassword = await bcrypt.hash(password, 10);
+  const id = Date.now().toString();
 
-  const newUser = {
-    id:          Date.now().toString(), // ID simple basado en timestamp
-    username,
-    password:    hashedPassword,
-    displayName: displayName || username,
-    permissions: permissions || [],    // ej: ["trabunda", "rutas"]
-    createdAt:   new Date().toISOString(),
-  };
-
-  users.push(newUser);
-  writeUsers(users);
-
-  const { password: _p, ...safeUser } = newUser;
-  return safeUser;
+  try {
+    const { rows } = await query(
+      `INSERT INTO users (id, username, password, display_name, permissions)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, username, display_name, permissions, created_at`,
+      [id, username, hashedPassword, displayName || username, permissions ?? []]
+    );
+    return toUser(rows[0]);
+  } catch (err) {
+    // Código 23505 = violación de UNIQUE constraint (username ya existe)
+    if (err.code === "23505") throw new Error(`El usuario "${username}" ya existe`);
+    throw err;
+  }
 }
 
 /**
- * Edita un usuario existente.
- * Si se pasa una nueva contraseña, la hashea. Si no, mantiene la anterior.
+ * Actualiza displayName, permissions y/o contraseña de un usuario.
+ * Solo actualiza los campos que se pasan — los demás quedan igual.
  */
 export async function updateUser(id, { displayName, password, permissions }) {
-  const users = readUsers();
-  const idx   = users.findIndex(u => u.id === id);
+  // Construimos la query dinámicamente según qué campos se envían
+  const sets   = [];
+  const values = [];
+  let   idx    = 1;
 
-  if (idx === -1) throw new Error("Usuario no encontrado");
+  if (displayName !== undefined) { sets.push(`display_name = $${idx++}`); values.push(displayName); }
+  if (permissions !== undefined) { sets.push(`permissions  = $${idx++}`); values.push(permissions); }
+  if (password)                  { sets.push(`password     = $${idx++}`); values.push(await bcrypt.hash(password, 10)); }
 
-  if (displayName !== undefined) users[idx].displayName = displayName;
-  if (permissions !== undefined) users[idx].permissions = permissions;
-  if (password)                  users[idx].password    = await bcrypt.hash(password, 10);
+  if (!sets.length) throw new Error("Nada que actualizar");
 
-  writeUsers(users);
+  values.push(id); // el último parámetro es siempre el id para el WHERE
 
-  const { password: _p, ...safeUser } = users[idx];
-  return safeUser;
+  const { rows } = await query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = $${idx}
+     RETURNING id, username, display_name, permissions, created_at`,
+    values
+  );
+
+  if (!rows.length) throw new Error("Usuario no encontrado");
+  return toUser(rows[0]);
 }
 
 /**
  * Elimina un usuario por ID.
  */
-export function deleteUser(id) {
-  const users    = readUsers();
-  const filtered = users.filter(u => u.id !== id);
-
-  if (filtered.length === users.length) throw new Error("Usuario no encontrado");
-
-  writeUsers(filtered);
+export async function deleteUser(id) {
+  const { rowCount } = await query("DELETE FROM users WHERE id = $1", [id]);
+  if (!rowCount) throw new Error("Usuario no encontrado");
 }

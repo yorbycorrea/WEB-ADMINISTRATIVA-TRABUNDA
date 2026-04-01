@@ -3,6 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
+import { initDB } from "./db/index.js";
 import { getTrabundaToken, getRutasToken, invalidateToken } from "./services/serviceAuth.js";
 import { getAllUsers, verifyUser, createUser, updateUser, deleteUser } from "./services/userStore.js";
 
@@ -141,8 +142,9 @@ app.get("/services/health", verifyToken, async (_req, res) => {
 // con permisos limitados a ciertas apps del Admin Suite.
 
 // Listar todos los usuarios
-app.get("/admin/users", verifyToken, requireSuperadmin, (_req, res) => {
-  res.json({ users: getAllUsers() });
+app.get("/admin/users", verifyToken, requireSuperadmin, async (_req, res) => {
+  const users = await getAllUsers();
+  res.json({ users });
 });
 
 // Crear usuario
@@ -181,9 +183,9 @@ app.put("/admin/users/:id", verifyToken, requireSuperadmin, async (req, res) => 
 });
 
 // Eliminar usuario
-app.delete("/admin/users/:id", verifyToken, requireSuperadmin, (req, res) => {
+app.delete("/admin/users/:id", verifyToken, requireSuperadmin, async (req, res) => {
   try {
-    deleteUser(req.params.id);
+    await deleteUser(req.params.id);
     res.json({ message: "Usuario eliminado" });
   } catch (err) {
     res.status(404).json({ error: err.message });
@@ -314,11 +316,20 @@ app.use("/api/rutas", verifyToken, (req, res) =>
 
 
 // ─── ARRANQUE ─────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🛡️  Gateway corriendo en http://localhost:${PORT}`);
-  console.log(`   POST /auth/login           → login (superadmin + usuarios)`);
-  console.log(`   GET  /admin/users          → listar usuarios (superadmin)`);
-  console.log(`   POST /admin/users          → crear usuario (superadmin)`);
-  console.log(`   GET  /dashboard/trabunda   → datos Trabunda`);
-  console.log(`   GET  /dashboard/rutas      → datos Rutas\n`);
-});
+// Primero inicializamos la BD (crea las tablas si no existen),
+// luego arrancamos el servidor HTTP.
+initDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n🛡️  Gateway corriendo en http://localhost:${PORT}`);
+      console.log(`   POST /auth/login           → login (superadmin + usuarios)`);
+      console.log(`   GET  /admin/users          → listar usuarios (superadmin)`);
+      console.log(`   POST /admin/users          → crear usuario (superadmin)`);
+      console.log(`   GET  /dashboard/trabunda   → datos Trabunda`);
+      console.log(`   GET  /dashboard/rutas      → datos Rutas\n`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ No se pudo conectar a la base de datos:", err.message);
+    process.exit(1); // si no hay BD, no tiene sentido arrancar el gateway
+  });
