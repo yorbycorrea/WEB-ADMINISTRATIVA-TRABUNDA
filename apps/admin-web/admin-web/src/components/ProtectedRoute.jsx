@@ -1,10 +1,17 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-// Este componente actúa como un "guardia" en la ruta.
-// Si el usuario tiene token → renderiza los children (la página real).
-// Si no tiene token → lo manda al login con <Navigate>.
-export default function ProtectedRoute({ children }) {
-  const { token } = useAuth();
-  return token ? children : <Navigate to="/login" replace />;
+// permission (opcional): si se pasa, verifica que el usuario tenga ese permiso.
+// Si no tiene token → va al login.
+// Si tiene token pero no el permiso → va a su página de inicio.
+export default function ProtectedRoute({ children, permission }) {
+  const { token, hasPermission, getHomePage } = useAuth();
+
+  if (!token) return <Navigate to="/login" replace />;
+
+  if (permission && !hasPermission(permission)) {
+    return <Navigate to={getHomePage()} replace />;
+  }
+
+  return children;
 }

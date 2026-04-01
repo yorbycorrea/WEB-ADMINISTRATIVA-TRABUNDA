@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Activity, Settings,
-  ShieldCheck, LogOut, ChevronRight
+  ShieldCheck, LogOut, ChevronRight, Users
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,16 +29,25 @@ function RutasIcon({ size = 20 }) {
   );
 }
 
-const navItems = [
-  { to: '/',         icon: <LayoutDashboard size={20}/>, label: 'Overview'  },
-  { to: '/trabunda', icon: <TrabundaIcon size={20}/>,    label: 'Trabunda'  },
-  { to: '/rutas',    icon: <RutasIcon size={20}/>,       label: 'Rutas'     },
-  { to: '/logs',     icon: <Activity size={20}/>,        label: 'System Logs' },
-  { to: '/settings', icon: <Settings size={20}/>,        label: 'Settings'  },
+// Todos los ítems posibles del sidebar.
+// Cada uno tiene un "permission" que se verifica antes de mostrarlo.
+// null en permission = visible para todos los que estén logueados.
+const ALL_NAV_ITEMS = [
+  { to: '/',         icon: <LayoutDashboard size={20}/>, label: 'Overview',     permission: 'overview'  },
+  { to: '/trabunda', icon: <TrabundaIcon size={20}/>,    label: 'Trabunda',     permission: 'trabunda'  },
+  { to: '/rutas',    icon: <RutasIcon size={20}/>,       label: 'Rutas',        permission: 'rutas'     },
+  { to: '/usuarios', icon: <Users size={20}/>,           label: 'Usuarios',     permission: 'users'     },
+  { to: '/logs',     icon: <Activity size={20}/>,        label: 'System Logs',  permission: null        },
+  { to: '/settings', icon: <Settings size={20}/>,        label: 'Settings',     permission: null        },
 ];
 
 export default function Layout({ children, title, subtitle }) {
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
+
+  // Filtramos solo los ítems que el usuario puede ver
+  const navItems = ALL_NAV_ITEMS.filter(item =>
+    item.permission === null || hasPermission(item.permission)
+  );
   const location         = useLocation();
   const navigate         = useNavigate();
 

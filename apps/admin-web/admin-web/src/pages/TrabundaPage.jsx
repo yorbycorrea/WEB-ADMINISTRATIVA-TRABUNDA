@@ -127,8 +127,11 @@ export default function TrabundaPage() {
   }, []);
 
   // ── Derivamos los datos que necesitamos del response ─────────────────────
-  const apiOnline      = data?.health?.status === 'ok' || data?.health?.status === 'online';
-  const workersOnline  = data?.healthWorkers?.status === 'ok';
+  // Si el gateway pudo obtener respuesta del endpoint (no es null),
+  // el servicio está online — no dependemos del formato exacto del body.
+  // null significa que el fetch falló (red caída, 5xx, timeout).
+  const apiOnline     = data?.health != null;
+  const workersOnline = data?.healthWorkers != null;
   const areasActivas   = (data?.areas?.areas ?? data?.areas?.data ?? []).filter(a => a.activo !== 0).length;
   const totalAreas     = (data?.areas?.areas ?? data?.areas?.data ?? []).length;
   const totalReportes  = data?.reportesHoy?.total ?? 0;

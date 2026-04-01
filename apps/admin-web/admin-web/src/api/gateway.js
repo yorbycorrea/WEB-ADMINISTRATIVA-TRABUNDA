@@ -25,7 +25,7 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
-// ─── Endpoints ───────────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function apiLogin(username, password) {
   const res = await fetch('/auth/login', {
@@ -36,20 +36,47 @@ export async function apiLogin(username, password) {
   return res.json();
 }
 
-export function apiGetServicesHealth() {
-  return apiFetch('/services/health');
-}
-
 export function apiGetMe() {
   return apiFetch('/auth/me');
 }
 
-// Datos del backend real de Trabunda
-export function apiGetTrabundaDashboard() {
-  return apiFetch('/trabunda/dashboard');
+// ─── Overview ─────────────────────────────────────────────────────────────────
+
+export function apiGetServicesHealth() {
+  return apiFetch('/services/health');
 }
 
-// Datos del backend real de Rutas
+// ─── Apps ─────────────────────────────────────────────────────────────────────
+
+// Rutas actualizadas a /dashboard/trabunda y /dashboard/rutas
+export function apiGetTrabundaDashboard() {
+  return apiFetch('/dashboard/trabunda');
+}
+
 export function apiGetRutasDashboard() {
-  return apiFetch('/rutas/dashboard');
+  return apiFetch('/dashboard/rutas');
+}
+
+// ─── Gestión de usuarios (solo superadmin) ────────────────────────────────────
+
+export function apiGetUsers() {
+  return apiFetch('/admin/users');
+}
+
+export function apiCreateUser(data) {
+  return apiFetch('/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function apiUpdateUser(id, data) {
+  return apiFetch(`/admin/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function apiDeleteUser(id) {
+  return apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
 }

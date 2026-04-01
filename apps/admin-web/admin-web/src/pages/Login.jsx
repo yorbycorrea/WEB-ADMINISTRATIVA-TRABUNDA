@@ -28,10 +28,14 @@ export default function Login() {
       const data = await apiLogin(form.username, form.password);
 
       if (data.token) {
-        // login() guarda el token en contexto y localStorage
         login(data.token, data.user);
-        // navigate redirige al dashboard sin recargar el navegador
-        navigate('/', { replace: true });
+        // Redirigimos a la primera página permitida del usuario,
+        // no siempre al '/' (que es Overview, que puede no tener permiso)
+        const home = data.user?.role === 'superadmin' ? '/' :
+          data.user?.permissions?.includes('overview') ? '/' :
+          data.user?.permissions?.includes('trabunda') ? '/trabunda' :
+          data.user?.permissions?.includes('rutas')    ? '/rutas' : '/';
+        navigate(home, { replace: true });
       } else {
         // El backend devolvió error (credenciales incorrectas)
         setError(data.error || 'Credenciales incorrectas');
