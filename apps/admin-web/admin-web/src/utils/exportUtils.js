@@ -2,7 +2,7 @@
 //  exportUtils.js — Exportación a PDF y Excel desde el browser
 // ─────────────────────────────────────────────────────────────────────────────
 
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
