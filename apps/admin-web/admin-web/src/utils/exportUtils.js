@@ -6,9 +6,17 @@ import jsPDFLib from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
-// Compatibilidad CJS/ESM: Vite puede resolver jsPDF de distintas formas
-// según si lo trata como módulo CJS o ESM.
+// ── DEBUG: ver qué expone jsPDF en este entorno ──────────────────────────────
+console.log('[exportUtils] jsPDFLib type:', typeof jsPDFLib);
+console.log('[exportUtils] jsPDFLib keys:', Object.keys(jsPDFLib ?? {}));
+console.log('[exportUtils] jsPDFLib.jsPDF:', typeof jsPDFLib?.jsPDF);
+console.log('[exportUtils] jsPDFLib.default:', typeof jsPDFLib?.default);
+console.log('[exportUtils] jsPDFLib.default?.jsPDF:', typeof jsPDFLib?.default?.jsPDF);
+console.log('[exportUtils] autoTable type:', typeof autoTable);
+
+// Compatibilidad CJS/ESM
 const jsPDF = jsPDFLib?.jsPDF ?? jsPDFLib?.default?.jsPDF ?? jsPDFLib?.default ?? jsPDFLib;
+console.log('[exportUtils] jsPDF resuelto:', typeof jsPDF, '| es constructor?', typeof jsPDF === 'function');
 
 const TIPO_LABELS = {
   APOYO_HORAS:    'Apoyo Horas',
