@@ -282,6 +282,38 @@ app.get("/dashboard/trabunda/reportes", verifyToken, requirePermission("trabunda
 });
 
 
+// ─── DETALLE COMPLETO DE UN REPORTE (requiere permiso "trabunda") ────────────
+// Obtiene cabecera + contenido interno según el tipo de reporte.
+// Cada tipo tiene su propio endpoint en el backend de Trabunda.
+app.get("/dashboard/trabunda/reportes/:id/detalle", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const { id } = req.params;
+
+    // 1. Cabecera — igual para todos los tipos
+    const cabecera = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/${id}`);
+    const tipo = cabecera.tipo_reporte;
+
+    // 2. Contenido — cada tipo tiene su propio endpoint y estructura
+    let contenido = null;
+    if (tipo === "APOYO_HORAS" || tipo === "SANEAMIENTO") {
+      contenido = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/${id}/lineas`);
+    } else if (tipo === "TRABAJO_AVANCE") {
+      contenido = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/trabajo-avance/${id}/resumen`);
+    } else if (tipo === "CONTEO_RAPIDO") {
+      contenido = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/conteo-rapido/${id}`);
+    }
+
+    res.json({ cabecera, contenido, tipo });
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener el detalle del reporte", detail: err.message });
+  }
+});
+
+
 // ─── DASHBOARD DE RUTAS (requiere permiso "rutas") ────────────────────────────
 app.get("/dashboard/rutas", verifyToken, requirePermission("rutas"), async (_req, res) => {
   const base = process.env.RUTAS_BACKEND_URL;

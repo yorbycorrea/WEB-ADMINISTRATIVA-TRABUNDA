@@ -5,8 +5,8 @@ import {
   Download,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { apiGetTrabundaDashboard, apiGetTrabundaReportes } from '../api/gateway';
-import { exportToPDF, exportToExcel, exportSingleReportPDF } from '../utils/exportUtils';
+import { apiGetTrabundaDashboard, apiGetTrabundaReportes, apiGetTrabundaReporteDetalle } from '../api/gateway';
+import { exportToPDF, exportToExcel, exportReporteDetallePDF } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -257,6 +257,8 @@ function TabReportes() {
   const [pagina,   setPagina]   = useState(1);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
+  // ID del reporte que está siendo descargado (para mostrar spinner en esa fila)
+  const [descargando, setDescargando] = useState(null);
 
   async function cargar({ f = fecha, t = tipo, tu = turno, search = q, p = 1 } = {}) {
     setLoading(true);
@@ -424,14 +426,28 @@ function TabReportes() {
                         {renderCelda(reporte, col)}
                       </td>
                     ))}
-                    {/* Botón de descarga individual */}
+                    {/* Botón de descarga individual — llama al endpoint de detalle */}
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => exportSingleReportPDF(reporte)}
+                        disabled={descargando === reporte.id}
+                        onClick={async () => {
+                          setDescargando(reporte.id);
+                          try {
+                            const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
+                            exportReporteDetallePDF(detalle.cabecera, detalle.contenido, detalle.tipo);
+                          } catch {
+                            alert('No se pudo descargar el reporte');
+                          } finally {
+                            setDescargando(null);
+                          }
+                        }}
                         title={`Descargar reporte #${reporte.id}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all disabled:opacity-50"
                       >
-                        <Download size={11} />
+                        {descargando === reporte.id
+                          ? <RefreshCw size={11} className="animate-spin" />
+                          : <Download size={11} />
+                        }
                         PDF
                       </button>
                     </td>

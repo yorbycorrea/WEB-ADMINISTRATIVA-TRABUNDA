@@ -69,6 +69,11 @@ export function apiGetRutasDashboard() {
   return apiFetch('/dashboard/rutas');
 }
 
+// Detalle completo de un reporte (cabecera + contenido interno)
+export function apiGetTrabundaReporteDetalle(id) {
+  return apiFetch(`/dashboard/trabunda/reportes/${id}/detalle`);
+}
+
 // ─── Gestión de usuarios (solo superadmin) ────────────────────────────────────
 
 export function apiGetUsers() {
