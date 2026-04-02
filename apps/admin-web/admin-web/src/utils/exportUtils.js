@@ -2,9 +2,13 @@
 //  exportUtils.js — Exportación a PDF y Excel desde el browser
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable'; // agrega doc.autoTable al prototipo
+import jsPDFLib from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+
+// Compatibilidad CJS/ESM: Vite puede resolver jsPDF de distintas formas
+// según si lo trata como módulo CJS o ESM.
+const jsPDF = jsPDFLib?.jsPDF ?? jsPDFLib?.default?.jsPDF ?? jsPDFLib?.default ?? jsPDFLib;
 
 const TIPO_LABELS = {
   APOYO_HORAS:    'Apoyo Horas',
