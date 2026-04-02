@@ -254,13 +254,33 @@ app.get("/dashboard/trabunda/reportes", verifyToken, requirePermission("trabunda
     let url = `${base}/reportes?fecha=${fecha}&limit=${limit}&offset=${offset}`;
     if (tipo) url += `&tipo=${tipo}`;
 
-    const data     = await fetchService(getTrabundaToken, "trabunda", url);
-    const reportes = data?.reportes ?? data?.data ?? [];
+    const data = await fetchService(getTrabundaToken, "trabunda", url);
 
-    // Si el backend soporta paginación real, usa su total; si no, usamos el largo del array
-    const total = data?.total ?? data?.count ?? reportes.length;
+    // Intentamos todos los nombres de campo comunes para el array de reportes
+    let reportes = [];
+    if (Array.isArray(data)) {
+      reportes = data; // el backend devuelve el array directamente
+    } else if (data && typeof data === "object") {
+      reportes = data.reportes
+               ?? data.data
+               ?? data.rows
+               ?? data.items
+               ?? data.records
+               ?? data.list
+               ?? data.results
+               ?? data.reporte
+               ?? [];
+    }
 
-    res.json({ reportes, total, fecha, tipo });
+    const total = typeof data?.total      === "number" ? data.total
+                : typeof data?.count      === "number" ? data.count
+                : typeof data?.totalCount === "number" ? data.totalCount
+                : reportes.length;
+
+    // _rawKeys: claves que devuelve el backend real — útil para diagnosticar
+    const _rawKeys = data && typeof data === "object" ? Object.keys(data) : [];
+
+    res.json({ reportes, total, fecha, tipo, _rawKeys });
   } catch (err) {
     res.status(502).json({ error: "No se pudo obtener reportes de Trabunda", detail: err.message });
   }
