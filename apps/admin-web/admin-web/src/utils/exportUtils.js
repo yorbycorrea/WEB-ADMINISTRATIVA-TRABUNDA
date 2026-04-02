@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable from 'jspdf-autotable'; // agrega doc.autoTable al prototipo
 import * as XLSX from 'xlsx';
 
 const TIPO_LABELS = {
