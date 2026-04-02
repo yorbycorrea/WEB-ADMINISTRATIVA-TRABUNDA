@@ -68,7 +68,7 @@ export default function AdminSuite() {
       <aside className="w-64 bg-[#0F172A] p-6 flex flex-col">
         <div className="flex items-center gap-3 px-2 mb-10">
           <div className="bg-blue-500 p-1.5 rounded-lg text-white"><ShieldCheck size={24} /></div>
-          <span className="text-white font-bold text-xl tracking-tight">Admin<span className="text-blue-400">Suite</span></span>
+          <span className="text-white font-bold text-xl tracking-tight">Admin<span className="text-blue-400">Trabunda</span></span>
         </div>
 
         <nav className="space-y-1">
