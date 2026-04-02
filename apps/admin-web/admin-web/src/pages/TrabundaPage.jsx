@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   RefreshCw, Clock, Users, FileText, CheckCircle, XCircle,
   AlertCircle, Database, Search, ChevronLeft, ChevronRight,
+  Download,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { apiGetTrabundaDashboard, apiGetTrabundaReportes } from '../api/gateway';
+import { exportToPDF, exportToExcel } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -339,7 +341,7 @@ function TabReportes() {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Header de la tabla */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
               {loading ? 'Cargando...' : `${total} reporte${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
@@ -348,6 +350,27 @@ function TabReportes() {
               Fecha: {fecha} {tipo ? `· Tipo: ${TIPO_LABELS[tipo]?.label ?? tipo}` : '· Todos los tipos'}
             </p>
           </div>
+
+          {/* Botones de exportación — solo visibles si hay datos */}
+          {!loading && reportes.length > 0 && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => exportToExcel(reportes, fecha, tipo)}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-all"
+              >
+                <Download size={13} />
+                Excel
+              </button>
+              <button
+                onClick={() => exportToPDF(reportes, fecha, tipo)}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all"
+              >
+                <Download size={13} />
+                PDF
+              </button>
+            </div>
+          )}
+
           {totalPaginas > 1 && (
             <p className="text-xs text-slate-400">
               Página {pagina + 1} de {totalPaginas}
