@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { apiGetTrabundaDashboard, apiGetTrabundaReportes } from '../api/gateway';
-import { exportToPDF, exportToExcel } from '../utils/exportUtils';
+import { exportToPDF, exportToExcel, exportSingleReportPDF } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -411,6 +411,9 @@ function TabReportes() {
                       {col.label}
                     </th>
                   ))}
+                  <th className="px-4 py-3 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Descargar
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -421,6 +424,17 @@ function TabReportes() {
                         {renderCelda(reporte, col)}
                       </td>
                     ))}
+                    {/* Botón de descarga individual */}
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => exportSingleReportPDF(reporte)}
+                        title={`Descargar reporte #${reporte.id}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all"
+                      >
+                        <Download size={11} />
+                        PDF
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

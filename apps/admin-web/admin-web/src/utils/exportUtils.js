@@ -96,6 +96,116 @@ export function exportToPDF(reportes, fecha, tipo) {
   doc.save(`trabunda-reportes-${fecha}${tipo ? `-${tipo.toLowerCase()}` : ''}.pdf`);
 }
 
+// ─── PDF individual ───────────────────────────────────────────────────────────
+
+/**
+ * Genera un PDF de UN solo reporte, en formato ficha/documento.
+ * @param {Object} reporte - El objeto del reporte individual
+ */
+export function exportSingleReportPDF(reporte) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const tipoLabel = TIPO_LABELS[reporte.tipo_reporte] ?? reporte.tipo_reporte ?? 'Reporte';
+  const fechaRep  = reporte.fecha
+    ? new Date(reporte.fecha).toLocaleDateString('es-ES', { dateStyle: 'long' })
+    : '—';
+  const ahora = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+
+  // ── Encabezado ───────────────────────────────────────────────────────────────
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, 210, 28, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Trabunda', 14, 12);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Reporte #${reporte.id} — ${tipoLabel}`, 14, 20);
+  doc.text(`Generado: ${ahora}`, 210 - 14, 20, { align: 'right' });
+
+  // ── Ficha principal ──────────────────────────────────────────────────────────
+  // Definimos los campos que queremos mostrar y en qué orden
+  const CAMPOS = [
+    { label: 'ID',              val: reporte.id },
+    { label: 'Fecha',           val: fechaRep },
+    { label: 'Turno',           val: reporte.turno ?? '—' },
+    { label: 'Tipo de reporte', val: tipoLabel },
+    { label: 'Área',            val: reporte.area_nombre ?? '—' },
+    { label: 'Creado por',      val: reporte.creado_por_nombre ?? '—' },
+    { label: 'Estado',          val: reporte.estado ?? '—' },
+    { label: 'Activo',          val: reporte.activo ? 'Sí' : 'No' },
+    { label: 'Creado el',       val: reporte.creado_en
+        ? new Date(reporte.creado_en).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+        : '—' },
+    { label: 'Cerrado el',      val: reporte.cerrado_en
+        ? new Date(reporte.cerrado_en).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+        : '—' },
+    { label: 'Vence el',        val: reporte.vence_en
+        ? new Date(reporte.vence_en).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })
+        : '—' },
+  ];
+
+  // Renderizamos en dos columnas
+  let y = 38;
+  const col1x = 14, col2x = 110;
+  const rowH  = 12;
+
+  doc.setFontSize(9);
+
+  CAMPOS.forEach((campo, idx) => {
+    const x = idx % 2 === 0 ? col1x : col2x;
+    if (idx % 2 === 0 && idx > 0) y += rowH;
+
+    // Fondo alternado
+    if (Math.floor(idx / 2) % 2 === 0) {
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.rect(x - 2, y - 5, 90, rowH, 'F');
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.text(campo.label + ':', x, y);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text(String(campo.val ?? '—'), x, y + 5);
+  });
+
+  y += rowH + 8;
+
+  // ── Observaciones (bloque separado) ─────────────────────────────────────────
+  if (reporte.observaciones) {
+    doc.setFillColor(241, 245, 249); // slate-100
+    doc.rect(14, y, 182, 8, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Observaciones', 16, y + 5.5);
+    y += 12;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(9);
+
+    // splitTextToSize divide el texto para que no se salga del margen
+    const lines = doc.splitTextToSize(reporte.observaciones, 178);
+    doc.text(lines, 16, y);
+    y += lines.length * 5 + 6;
+  }
+
+  // ── Pie de página ────────────────────────────────────────────────────────────
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Trabunda — Sistema de gestión operativa', 14, 290);
+  doc.text(`Reporte #${reporte.id}`, 210 - 14, 290, { align: 'right' });
+
+  doc.save(`trabunda-reporte-${reporte.id}-${reporte.tipo_reporte ?? 'detalle'}.pdf`);
+}
+
 // ─── Excel ────────────────────────────────────────────────────────────────────
 
 /**
