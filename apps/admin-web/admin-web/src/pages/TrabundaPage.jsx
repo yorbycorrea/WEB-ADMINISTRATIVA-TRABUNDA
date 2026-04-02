@@ -435,8 +435,9 @@ function TabReportes() {
                           try {
                             const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
                             exportReporteDetallePDF(detalle.cabecera, detalle.contenido, detalle.tipo);
-                          } catch {
-                            alert('No se pudo descargar el reporte');
+                          } catch (err) {
+                            console.error('Error generando PDF:', err);
+                            alert('Error: ' + (err?.message ?? 'No se pudo generar el PDF'));
                           } finally {
                             setDescargando(null);
                           }
