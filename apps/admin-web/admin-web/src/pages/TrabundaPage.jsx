@@ -206,28 +206,67 @@ function TabResumen({ data, loading }) {
   );
 }
 
+// ─── Columnas conocidas del backend de Trabunda ───────────────────────────────
+// Definimos qué columnas mostrar y con qué etiqueta.
+// El orden aquí es el orden en la tabla.
+const COLUMNAS = [
+  { key: 'id',                label: 'ID',         width: 'w-16'   },
+  { key: 'fecha',             label: 'Fecha',       width: 'w-28'   },
+  { key: 'turno',             label: 'Turno',       width: 'w-20'   },
+  { key: 'tipo_reporte',      label: 'Tipo',        width: 'w-36'   },
+  { key: 'area_nombre',       label: 'Área',        width: 'w-40'   },
+  { key: 'creado_por_nombre', label: 'Creador',     width: 'w-40'   },
+  { key: 'estado',            label: 'Estado',      width: 'w-24'   },
+  { key: 'observaciones',     label: 'Observaciones', width: 'w-52' },
+  { key: 'creado_en',         label: 'Creado',      width: 'w-36'   },
+];
+
+const ESTADO_COLORS = {
+  ABIERTO:   'bg-blue-100 text-blue-700',
+  CERRADO:   'bg-slate-100 text-slate-600',
+  PENDIENTE: 'bg-amber-100 text-amber-700',
+  APROBADO:  'bg-emerald-100 text-emerald-700',
+  RECHAZADO: 'bg-red-100 text-red-600',
+};
+
+function EstadoBadge({ estado }) {
+  if (!estado) return <span className="text-slate-300">—</span>;
+  const cls = ESTADO_COLORS[estado?.toUpperCase()] ?? 'bg-slate-100 text-slate-600';
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>{estado}</span>;
+}
+
+function fmtFecha(val) {
+  if (!val) return '—';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val))
+    return new Date(val).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val))
+    return new Date(val + 'T00:00:00').toLocaleDateString('es-ES');
+  return String(val);
+}
+
 // ─── Tab: Reportes ────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 25;
-
 function TabReportes() {
-  const [fecha,    setFecha]    = useState(hoy());
-  const [tipo,     setTipo]     = useState('');
-  const [busqueda, setBusqueda] = useState('');
+  const [fecha,   setFecha]   = useState(hoy());
+  const [tipo,    setTipo]    = useState('');
+  const [turno,   setTurno]   = useState('');
+  const [q,       setQ]       = useState('');
   const [reportes, setReportes] = useState([]);
   const [total,    setTotal]    = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [pagina,   setPagina]   = useState(1);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
-  const [pagina,   setPagina]   = useState(0);
 
-  async function cargar(f = fecha, t = tipo, p = 0) {
+  async function cargar({ f = fecha, t = tipo, tu = turno, search = q, p = 1 } = {}) {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGetTrabundaReportes({ fecha: f, tipo: t, limit: PAGE_SIZE, offset: p * PAGE_SIZE });
+      const data = await apiGetTrabundaReportes({ fecha: f, tipo: t, turno: tu, q: search, page: p, limit: 25 });
       setReportes(data?.reportes ?? []);
       setTotal(data?.total ?? 0);
-      setPagina(p);
+      setTotalPages(data?.totalPages ?? 1);
+      setPagina(data?.page ?? p);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -235,43 +274,25 @@ function TabReportes() {
     }
   }
 
-  // Carga inicial
   useEffect(() => { cargar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFiltrar(e) {
     e.preventDefault();
-    cargar(fecha, tipo, 0);
+    cargar({ f: fecha, t: tipo, tu: turno, search: q, p: 1 });
   }
 
-  // Filtro de búsqueda en cliente (sobre los registros ya cargados)
-  const reportesFiltrados = busqueda.trim()
-    ? reportes.filter(r =>
-        JSON.stringify(r).toLowerCase().includes(busqueda.toLowerCase())
-      )
-    : reportes;
-
-  const totalPaginas = Math.ceil(total / PAGE_SIZE);
-
-  // Detectamos las columnas del primer reporte para la tabla dinámica
-  const columnas = reportes.length > 0
-    ? Object.keys(reportes[0]).filter(k => k !== 'password')
-    : [];
-
-  // Formatea un valor para mostrarlo en la celda
-  function fmtValor(val) {
-    if (val === null || val === undefined) return <span className="text-slate-300">—</span>;
-    if (typeof val === 'boolean') return val ? <span className="text-emerald-500 text-xs">✓ Sí</span> : <span className="text-slate-400 text-xs">No</span>;
-    if (typeof val === 'object') return <span className="text-xs text-slate-400 italic">{JSON.stringify(val)}</span>;
-    // Detectar fechas ISO
-    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
-      return new Date(val).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  function renderCelda(reporte, col) {
+    const val = reporte[col.key];
+    if (col.key === 'tipo_reporte') return <TipoBadge tipo={val} />;
+    if (col.key === 'estado')       return <EstadoBadge estado={val} />;
+    if (col.key === 'fecha' || col.key === 'creado_en') return <span className="text-slate-600">{fmtFecha(val)}</span>;
+    if (col.key === 'observaciones') return <span className="text-slate-500 text-xs truncate block max-w-[200px]" title={val ?? ''}>{val || '—'}</span>;
+    if (col.key === 'turno') {
+      if (!val) return <span className="text-slate-300">—</span>;
+      return <span className="text-xs font-semibold text-slate-600 uppercase">{val}</span>;
     }
-    return String(val);
-  }
-
-  // Nombre legible para la columna (snake_case → Título)
-  function fmtCol(key) {
-    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    if (val === null || val === undefined) return <span className="text-slate-300">—</span>;
+    return <span>{String(val)}</span>;
   }
 
   return (
@@ -280,58 +301,52 @@ function TabReportes() {
       {/* ── Filtros ──────────────────────────────────────────────── */}
       <form onSubmit={handleFiltrar} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
         <div className="flex flex-wrap gap-3 items-end">
+
           {/* Fecha */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={e => setFecha(e.target.value)}
-              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-            />
+            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
           </div>
 
           {/* Tipo */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tipo</label>
-            <select
-              value={tipo}
-              onChange={e => setTipo(e.target.value)}
-              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white"
-            >
-              <option value="">Todos los tipos</option>
-              {MODULOS.map(m => (
-                <option key={m.tipo} value={m.tipo}>{m.label}</option>
-              ))}
+            <select value={tipo} onChange={e => setTipo(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white">
+              <option value="">Todos</option>
+              {MODULOS.map(m => <option key={m.tipo} value={m.tipo}>{m.label}</option>)}
             </select>
           </div>
 
-          {/* Botón */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all"
-          >
-            <Search size={14} />
-            Buscar
-          </button>
-
-          {/* Búsqueda en cliente */}
-          <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Filtrar resultados</label>
-            <input
-              type="text"
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              placeholder="Buscar en los resultados..."
-              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-            />
+          {/* Turno */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Turno</label>
+            <select value={turno} onChange={e => setTurno(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 bg-white">
+              <option value="">Todos</option>
+              <option value="MAÑANA">Mañana</option>
+              <option value="TARDE">Tarde</option>
+              <option value="NOCHE">Noche</option>
+            </select>
           </div>
+
+          {/* Búsqueda libre (se envía al servidor como &q=) */}
+          <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Buscar</label>
+            <input type="text" value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Área, nombre, observaciones..."
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+          </div>
+
+          <button type="submit" disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all">
+            <Search size={14} /> Buscar
+          </button>
         </div>
       </form>
 
-      {/* ── Resultado ────────────────────────────────────────────── */}
-
+      {/* ── Error ────────────────────────────────────────────────── */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-center gap-3">
           <XCircle size={20} className="text-red-500 flex-shrink-0" />
@@ -339,85 +354,71 @@ function TabReportes() {
         </div>
       )}
 
+      {/* ── Tabla ────────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {/* Header de la tabla */}
+
+        {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
           <div>
             <p className="font-semibold text-slate-800 text-sm">
               {loading ? 'Cargando...' : `${total} reporte${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
             </p>
             <p className="text-xs text-slate-400">
-              Fecha: {fecha} {tipo ? `· Tipo: ${TIPO_LABELS[tipo]?.label ?? tipo}` : '· Todos los tipos'}
+              {fecha}{tipo ? ` · ${TIPO_LABELS[tipo]?.label ?? tipo}` : ''}{turno ? ` · Turno ${turno}` : ''}
             </p>
           </div>
 
-          {/* Botones de exportación — solo visibles si hay datos */}
           {!loading && reportes.length > 0 && (
             <div className="flex gap-2">
-              <button
-                onClick={() => exportToExcel(reportes, fecha, tipo)}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-all"
-              >
-                <Download size={13} />
-                Excel
+              <button onClick={() => exportToExcel(reportes, fecha, tipo)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-all">
+                <Download size={12} /> Excel
               </button>
-              <button
-                onClick={() => exportToPDF(reportes, fecha, tipo)}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all"
-              >
-                <Download size={13} />
-                PDF
+              <button onClick={() => exportToPDF(reportes, fecha, tipo)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all">
+                <Download size={12} /> PDF
               </button>
             </div>
-          )}
-
-          {totalPaginas > 1 && (
-            <p className="text-xs text-slate-400">
-              Página {pagina + 1} de {totalPaginas}
-            </p>
           )}
         </div>
 
         {/* Skeleton */}
         {loading && (
           <div className="p-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-10 bg-slate-100 rounded-xl animate-pulse" />
             ))}
           </div>
         )}
 
         {/* Sin resultados */}
-        {!loading && reportesFiltrados.length === 0 && (
+        {!loading && reportes.length === 0 && (
           <div className="p-12 text-center">
             <FileText size={36} className="mx-auto text-slate-300 mb-3" />
-            <p className="font-semibold text-slate-500">Sin reportes para esta fecha</p>
-            <p className="text-sm text-slate-400 mt-1">Intenta cambiar la fecha o el tipo de reporte</p>
+            <p className="font-semibold text-slate-500">Sin reportes para esta búsqueda</p>
+            <p className="text-sm text-slate-400 mt-1">Prueba otra fecha, tipo o turno</p>
           </div>
         )}
 
-        {/* Tabla dinámica */}
-        {!loading && reportesFiltrados.length > 0 && (
+        {/* Tabla con columnas fijas */}
+        {!loading && reportes.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  {columnas.map(col => (
-                    <th key={col} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
-                      {fmtCol(col)}
+                  {COLUMNAS.map(col => (
+                    <th key={col.key} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                      {col.label}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {reportesFiltrados.map((reporte, i) => (
+                {reportes.map((reporte, i) => (
                   <tr key={reporte.id ?? i} className="hover:bg-slate-50 transition-colors">
-                    {columnas.map(col => (
-                      <td key={col} className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[250px] truncate">
-                        {col === 'tipo_reporte' || col === 'tipo'
-                          ? <TipoBadge tipo={reporte[col]} />
-                          : fmtValor(reporte[col])
-                        }
+                    {COLUMNAS.map(col => (
+                      <td key={col.key} className="px-4 py-3 text-slate-700">
+                        {renderCelda(reporte, col)}
                       </td>
                     ))}
                   </tr>
@@ -428,21 +429,19 @@ function TabReportes() {
         )}
 
         {/* Paginación */}
-        {!loading && totalPaginas > 1 && (
+        {!loading && totalPages > 1 && (
           <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
             <button
-              onClick={() => cargar(fecha, tipo, pagina - 1)}
-              disabled={pagina === 0}
+              onClick={() => cargar({ p: pagina - 1 })}
+              disabled={pagina <= 1}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all"
             >
               <ChevronLeft size={14} /> Anterior
             </button>
-            <span className="text-sm text-slate-500">
-              Mostrando {pagina * PAGE_SIZE + 1}–{Math.min((pagina + 1) * PAGE_SIZE, total)} de {total}
-            </span>
+            <span className="text-sm text-slate-500">Página {pagina} de {totalPages} · {total} registros</span>
             <button
-              onClick={() => cargar(fecha, tipo, pagina + 1)}
-              disabled={pagina >= totalPaginas - 1}
+              onClick={() => cargar({ p: pagina + 1 })}
+              disabled={pagina >= totalPages}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all"
             >
               Siguiente <ChevronRight size={14} />

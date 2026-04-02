@@ -239,48 +239,43 @@ app.get("/dashboard/trabunda", verifyToken, requirePermission("trabunda"), async
 
 
 // ─── REPORTES DE TRABUNDA (requiere permiso "trabunda") ──────────────────────
-// Permite filtrar por fecha y tipo. Soporta paginación básica.
+// El backend de Trabunda usa paginación por "page" (no offset).
+// El array de reportes viene en el campo "items".
+// Parámetros soportados: fecha, tipo, turno, q, page, limit, desde, hasta, area_id
 app.get("/dashboard/trabunda/reportes", verifyToken, requirePermission("trabunda"), async (req, res) => {
   const base = process.env.TRABUNDA_BACKEND_URL;
   if (!base || !process.env.TRABUNDA_ADMIN_USER) {
     return res.status(503).json({ configured: false, error: "Backend de Trabunda no configurado en .env" });
   }
   try {
-    const fecha  = req.query.fecha  || new Date().toISOString().split("T")[0];
-    const tipo   = req.query.tipo   || "";
-    const limit  = parseInt(req.query.limit)  || 200;
-    const offset = parseInt(req.query.offset) || 0;
+    const fecha   = req.query.fecha    || new Date().toISOString().split("T")[0];
+    const tipo    = req.query.tipo     || "";
+    const turno   = req.query.turno    || "";
+    const q       = req.query.q        || "";
+    const area_id = req.query.area_id  || "";
+    const desde   = req.query.desde    || "";
+    const hasta   = req.query.hasta    || "";
+    const page    = parseInt(req.query.page)  || 1;
+    const limit   = parseInt(req.query.limit) || 25;
 
-    let url = `${base}/reportes?fecha=${fecha}&limit=${limit}&offset=${offset}`;
-    if (tipo) url += `&tipo=${tipo}`;
+    // Construimos la URL con todos los filtros que vengan
+    const params = new URLSearchParams({ fecha, page, limit });
+    if (tipo)    params.set("tipo",    tipo);
+    if (turno)   params.set("turno",   turno);
+    if (q)       params.set("q",       q);
+    if (area_id) params.set("area_id", area_id);
+    if (desde)   params.set("desde",   desde);
+    if (hasta)   params.set("hasta",   hasta);
 
-    const data = await fetchService(getTrabundaToken, "trabunda", url);
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes?${params}`);
 
-    // Intentamos todos los nombres de campo comunes para el array de reportes
-    let reportes = [];
-    if (Array.isArray(data)) {
-      reportes = data; // el backend devuelve el array directamente
-    } else if (data && typeof data === "object") {
-      reportes = data.reportes
-               ?? data.data
-               ?? data.rows
-               ?? data.items
-               ?? data.records
-               ?? data.list
-               ?? data.results
-               ?? data.reporte
-               ?? [];
-    }
+    // El backend de Trabunda devuelve los registros en el campo "items"
+    const reportes   = data?.items ?? [];
+    const total      = data?.total      ?? reportes.length;
+    const totalPages = data?.total_pages ?? 1;
+    const currentPage = data?.page      ?? page;
 
-    const total = typeof data?.total      === "number" ? data.total
-                : typeof data?.count      === "number" ? data.count
-                : typeof data?.totalCount === "number" ? data.totalCount
-                : reportes.length;
-
-    // _rawKeys: claves que devuelve el backend real — útil para diagnosticar
-    const _rawKeys = data && typeof data === "object" ? Object.keys(data) : [];
-
-    res.json({ reportes, total, fecha, tipo, _rawKeys });
+    res.json({ reportes, total, totalPages, page: currentPage, fecha, tipo });
   } catch (err) {
     res.status(502).json({ error: "No se pudo obtener reportes de Trabunda", detail: err.message });
   }

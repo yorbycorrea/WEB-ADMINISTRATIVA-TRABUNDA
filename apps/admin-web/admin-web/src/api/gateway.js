@@ -54,11 +54,14 @@ export function apiGetTrabundaDashboard() {
 }
 
 // Reportes de Trabunda con filtros opcionales
-// fecha: 'YYYY-MM-DD', tipo: 'APOYO_HORAS' | 'SANEAMIENTO' | etc.
-export function apiGetTrabundaReportes({ fecha, tipo, limit = 200, offset = 0 } = {}) {
-  const params = new URLSearchParams({ limit, offset });
-  if (fecha) params.set('fecha', fecha);
-  if (tipo)  params.set('tipo', tipo);
+// El backend usa paginación por "page" y devuelve los datos en "items"
+export function apiGetTrabundaReportes({ fecha, tipo, turno, q, area_id, page = 1, limit = 25 } = {}) {
+  const params = new URLSearchParams({ page, limit });
+  if (fecha)   params.set('fecha',   fecha);
+  if (tipo)    params.set('tipo',    tipo);
+  if (turno)   params.set('turno',   turno);
+  if (q)       params.set('q',       q);
+  if (area_id) params.set('area_id', area_id);
   return apiFetch(`/dashboard/trabunda/reportes?${params}`);
 }
 
