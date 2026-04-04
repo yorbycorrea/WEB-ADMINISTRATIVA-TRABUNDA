@@ -127,16 +127,18 @@ function pieFirmas(doc, cabecera) {
 }
 
 // ─── PDF: APOYO_HORAS y SANEAMIENTO ──────────────────────────────────────────
-function pdfLineas(cabecera, contenido) {
+function pdfLineas(cabecera, contenido, tipo) {
   const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const lineas = contenido?.items ?? [];
+  const esSaneamiento = tipo === 'SANEAMIENTO';
+  const ultimaColHeader = esSaneamiento ? 'LABORES REALIZADAS' : 'ÁREA';
 
   encabezadoInstitucion(doc, cabecera);
 
   const startY = doc.lastAutoTable.finalY + 2;
 
   autoTable(doc, {
-    head: [['N°', 'CÓDIGO', 'APELLIDOS Y NOMBRES', 'H. Ini', 'H. Fin', 'Tot. Hrs', 'ÁREA']],
+    head: [['N°', 'CÓDIGO', 'APELLIDOS Y NOMBRES', 'H. Ini', 'H. Fin', 'Tot. Hrs', ultimaColHeader]],
     body: lineas.map((l, i) => [
       i + 1,
       l.trabajador_codigo ?? '—',
@@ -144,7 +146,9 @@ function pdfLineas(cabecera, contenido) {
       fmtHora(l.hora_inicio),
       fmtHora(l.hora_fin),
       l.horas != null ? Number(l.horas).toFixed(1) : '0.0',
-      (l.area_nombre ?? l.cuadrilla_nombre ?? '—').toUpperCase(),
+      esSaneamiento
+        ? (l.labores ?? '—')
+        : (l.area_nombre ?? l.cuadrilla_nombre ?? '—').toUpperCase(),
     ]),
     startY,
     margin: { left: 14, right: 14 },
@@ -253,7 +257,7 @@ export function exportReporteDetallePDF(cabecera, contenido, tipo) {
   switch (tipo) {
     case 'APOYO_HORAS':
     case 'SANEAMIENTO':
-      return pdfLineas(cabecera, contenido);
+      return pdfLineas(cabecera, contenido, tipo);
     case 'TRABAJO_AVANCE':
       return pdfTrabajoAvance(cabecera, contenido);
     case 'CONTEO_RAPIDO':
@@ -287,7 +291,9 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
   // ── Hojas de contenido según tipo ──
   if (tipo === 'APOYO_HORAS' || tipo === 'SANEAMIENTO') {
     const lineas = contenido?.items ?? [];
-    const head = ['N°', 'Código', 'Apellidos y Nombres', 'H. Inicio', 'H. Fin', 'Total Hrs', 'Área'];
+    const esSaneamiento = tipo === 'SANEAMIENTO';
+    const ultimaCol = esSaneamiento ? 'Labores Realizadas' : 'Área';
+    const head = ['N°', 'Código', 'Apellidos y Nombres', 'H. Inicio', 'H. Fin', 'Total Hrs', ultimaCol];
     const rows = lineas.map((l, i) => [
       i + 1,
       l.trabajador_codigo ?? '—',
@@ -295,7 +301,9 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
       fmtHora(l.hora_inicio),
       fmtHora(l.hora_fin),
       l.horas != null ? Number(l.horas).toFixed(1) : '0.0',
-      l.area_nombre ?? l.cuadrilla_nombre ?? '—',
+      esSaneamiento
+        ? (l.labores ?? '—')
+        : (l.area_nombre ?? l.cuadrilla_nombre ?? '—'),
     ]);
     // Fila de totales
     const totalHrs = lineas.reduce((s, l) => s + (Number(l.horas) || 0), 0);
