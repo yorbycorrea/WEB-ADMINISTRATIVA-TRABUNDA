@@ -263,6 +263,98 @@ export function exportReporteDetallePDF(cabecera, contenido, tipo) {
   }
 }
 
+// ─── Excel detalle individual ─────────────────────────────────────────────────
+export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
+  if (!cabecera) throw new Error('Sin datos de cabecera del reporte');
+
+  const libro = XLSX.utils.book_new();
+
+  // ── Hoja de cabecera (común a todos los tipos) ──
+  const infoCab = [
+    ['Campo', 'Valor'],
+    ['ID',          cabecera.id],
+    ['Tipo',        TIPO_LABELS[tipo] ?? tipo],
+    ['Fecha',       fmtFecha(cabecera.fecha)],
+    ['Turno',       cabecera.turno ?? '—'],
+    ['Estado',      cabecera.estado ?? '—'],
+    ['Planillero',  cabecera.creado_por_nombre ?? '—'],
+    ['Observaciones', cabecera.observaciones ?? '—'],
+  ];
+  const hojaCab = XLSX.utils.aoa_to_sheet(infoCab);
+  hojaCab['!cols'] = [{ wch: 18 }, { wch: 36 }];
+  XLSX.utils.book_append_sheet(libro, hojaCab, 'Cabecera');
+
+  // ── Hojas de contenido según tipo ──
+  if (tipo === 'APOYO_HORAS' || tipo === 'SANEAMIENTO') {
+    const lineas = contenido?.items ?? [];
+    const head = ['N°', 'Código', 'Apellidos y Nombres', 'H. Inicio', 'H. Fin', 'Total Hrs', 'Área'];
+    const rows = lineas.map((l, i) => [
+      i + 1,
+      l.trabajador_codigo ?? '—',
+      l.trabajador_nombre ?? '—',
+      fmtHora(l.hora_inicio),
+      fmtHora(l.hora_fin),
+      l.horas != null ? Number(l.horas).toFixed(1) : '0.0',
+      l.area_nombre ?? l.cuadrilla_nombre ?? '—',
+    ]);
+    // Fila de totales
+    const totalHrs = lineas.reduce((s, l) => s + (Number(l.horas) || 0), 0);
+    rows.push(['', '', `TOTAL: ${lineas.length} trabajadores`, '', '', totalHrs.toFixed(1), '']);
+
+    const hoja = XLSX.utils.aoa_to_sheet([head, ...rows]);
+    hoja['!cols'] = [6, 12, 36, 10, 10, 12, 28].map(wch => ({ wch }));
+    XLSX.utils.book_append_sheet(libro, hoja, TIPO_LABELS[tipo] ?? tipo);
+  }
+
+  else if (tipo === 'TRABAJO_AVANCE') {
+    // Hoja Recepción
+    if (contenido?.recepcion?.length) {
+      const head = ['Nombre', 'H. Inicio', 'H. Fin', 'KG'];
+      const rows = contenido.recepcion.map(r => [r.nombre ?? '—', fmtHora(r.hora_inicio), fmtHora(r.hora_fin), r.kg ?? 0]);
+      const hoja = XLSX.utils.aoa_to_sheet([head, ...rows]);
+      hoja['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(libro, hoja, 'Recepción');
+    }
+    // Hoja Fileteado
+    if (contenido?.fileteado?.lista?.length) {
+      const head = ['Nombre', 'H. Inicio', 'H. Fin', 'KG'];
+      const rows = contenido.fileteado.lista.map(r => [r.nombre ?? '—', fmtHora(r.hora_inicio), fmtHora(r.hora_fin), r.kg ?? 0]);
+      rows.push(['TOTAL KG', '', '', contenido.fileteado.totalKg ?? 0]);
+      const hoja = XLSX.utils.aoa_to_sheet([head, ...rows]);
+      hoja['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(libro, hoja, 'Fileteado');
+    }
+    // Hoja Totales
+    if (contenido?.totales) {
+      const t = contenido.totales;
+      const hoja = XLSX.utils.aoa_to_sheet([
+        ['Concepto', 'KG'],
+        ['Recepción', t.RECEPCION ?? 0],
+        ['Fileteado', t.FILETEADO ?? 0],
+        ['Apoyo Recepción', t.APOYO_RECEPCION ?? 0],
+      ]);
+      hoja['!cols'] = [{ wch: 20 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(libro, hoja, 'Totales');
+    }
+  }
+
+  else if (tipo === 'CONTEO_RAPIDO') {
+    const cab  = contenido?.reporte ?? cabecera;
+    const items = contenido?.items ?? [];
+    const total = items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+    const head = ['Área', 'Cantidad'];
+    const rows = items.map(i => [i.area_nombre ?? '—', i.cantidad ?? 0]);
+    rows.push(['TOTAL', total]);
+    const hoja = XLSX.utils.aoa_to_sheet([head, ...rows]);
+    hoja['!cols'] = [{ wch: 30 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(libro, hoja, 'Conteo Rápido');
+    void cab;
+  }
+
+  const nombreTipo = (TIPO_LABELS[tipo] ?? tipo ?? 'reporte').toLowerCase().replace(/ /g, '-');
+  XLSX.writeFile(libro, `trabunda-reporte-${cabecera.id}-${nombreTipo}.xlsx`);
+}
+
 // ─── PDF lista completa ───────────────────────────────────────────────────────
 export function exportToPDF(reportes, fecha, tipo) {
   if (!reportes.length) return;

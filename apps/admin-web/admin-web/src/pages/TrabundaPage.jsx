@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { apiGetTrabundaDashboard, apiGetTrabundaReportes, apiGetTrabundaReporteDetalle } from '../api/gateway';
-import { exportToPDF, exportToExcel, exportReporteDetallePDF } from '../utils/exportUtils';
+import { exportToPDF, exportToExcel, exportReporteDetallePDF, exportReporteDetalleExcel } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -257,8 +257,9 @@ function TabReportes() {
   const [pagina,   setPagina]   = useState(1);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
-  // ID del reporte que está siendo descargado (para mostrar spinner en esa fila)
-  const [descargando, setDescargando] = useState(null);
+  // ID del reporte descargando (null = ninguno)
+  const [descargando,      setDescargando]      = useState(null); // PDF
+  const [descargandoExcel, setDescargandoExcel] = useState(null); // Excel
 
   async function cargar({ f = fecha, t = tipo, tu = turno, search = q, p = 1 } = {}) {
     setLoading(true);
@@ -426,31 +427,58 @@ function TabReportes() {
                         {renderCelda(reporte, col)}
                       </td>
                     ))}
-                    {/* Botón de descarga individual — llama al endpoint de detalle */}
+                    {/* Botones de descarga individual */}
                     <td className="px-4 py-3 text-right">
-                      <button
-                        disabled={descargando === reporte.id}
-                        onClick={async () => {
-                          setDescargando(reporte.id);
-                          try {
-                            const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
-                            exportReporteDetallePDF(detalle.cabecera, detalle.contenido, detalle.tipo);
-                          } catch (err) {
-                            console.error('Error generando PDF:', err);
-                            alert('Error: ' + (err?.message ?? 'No se pudo generar el PDF'));
-                          } finally {
-                            setDescargando(null);
+                      <div className="inline-flex gap-1.5">
+                        {/* Excel */}
+                        <button
+                          disabled={descargandoExcel === reporte.id}
+                          onClick={async () => {
+                            setDescargandoExcel(reporte.id);
+                            try {
+                              const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
+                              exportReporteDetalleExcel(detalle.cabecera, detalle.contenido, detalle.tipo);
+                            } catch (err) {
+                              console.error('Error generando Excel:', err);
+                              alert('Error: ' + (err?.message ?? 'No se pudo generar el Excel'));
+                            } finally {
+                              setDescargandoExcel(null);
+                            }
+                          }}
+                          title={`Descargar Excel #${reporte.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-all disabled:opacity-50"
+                        >
+                          {descargandoExcel === reporte.id
+                            ? <RefreshCw size={11} className="animate-spin" />
+                            : <Download size={11} />
                           }
-                        }}
-                        title={`Descargar reporte #${reporte.id}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all disabled:opacity-50"
-                      >
-                        {descargando === reporte.id
-                          ? <RefreshCw size={11} className="animate-spin" />
-                          : <Download size={11} />
-                        }
-                        PDF
-                      </button>
+                          XLS
+                        </button>
+                        {/* PDF */}
+                        <button
+                          disabled={descargando === reporte.id}
+                          onClick={async () => {
+                            setDescargando(reporte.id);
+                            try {
+                              const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
+                              exportReporteDetallePDF(detalle.cabecera, detalle.contenido, detalle.tipo);
+                            } catch (err) {
+                              console.error('Error generando PDF:', err);
+                              alert('Error: ' + (err?.message ?? 'No se pudo generar el PDF'));
+                            } finally {
+                              setDescargando(null);
+                            }
+                          }}
+                          title={`Descargar PDF #${reporte.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all disabled:opacity-50"
+                        >
+                          {descargando === reporte.id
+                            ? <RefreshCw size={11} className="animate-spin" />
+                            : <Download size={11} />
+                          }
+                          PDF
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
