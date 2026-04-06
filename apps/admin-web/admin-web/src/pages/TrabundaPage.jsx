@@ -521,18 +521,13 @@ function TabReportes() {
 const ROL_INFO = {
   ADMIN: {
     label: 'Administrador',
-    descripcion: 'Puede crear y gestionar todos los reportes del sistema Trabunda.',
+    descripcion: 'Puede crear y gestionar todos los reportes del sistema Trabunda (planillero, supervisor, etc.).',
     color: 'violet',
-  },
-  SCANNER: {
-    label: 'Scanner',
-    descripcion: 'Acceso al módulo de escaneo y operaciones de campo.',
-    color: 'blue',
   },
 };
 
 function ModalCrearUsuario({ onClose, onCreated }) {
-  const [form, setForm]         = useState({ username: '', nombre: '', password: '', rol: 'ADMIN' });
+  const [form, setForm]         = useState({ username: '', nombre: '', password: '', rol: 'ADMIN' }); // rol siempre ADMIN en Trabunda
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
@@ -591,25 +586,16 @@ function ModalCrearUsuario({ onClose, onCreated }) {
             </div>
           )}
 
-          {/* Rol */}
+          {/* Rol — solo ADMIN disponible en Trabunda */}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Rol <span className="text-red-400">*</span></label>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(ROL_INFO).map(([key, info]) => (
-                <button key={key} type="button"
-                  onClick={() => setForm(p => ({ ...p, rol: key }))}
-                  className={`p-3 rounded-xl border-2 text-left transition-all
-                    ${form.rol === key
-                      ? key === 'ADMIN' ? 'border-violet-500 bg-violet-50' : 'border-blue-500 bg-blue-50'
-                      : 'border-slate-200 hover:border-slate-300 bg-white'
-                    }`}>
-                  <p className={`text-xs font-bold ${form.rol === key ? (key === 'ADMIN' ? 'text-violet-700' : 'text-blue-700') : 'text-slate-600'}`}>
-                    {info.label}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">{info.descripcion}</p>
-                </button>
-              ))}
+            <label className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Rol</label>
+            <div className="p-3 rounded-xl border-2 border-violet-400 bg-violet-50">
+              <p className="text-xs font-bold text-violet-700">ADMIN — Administrador</p>
+              <p className="text-[11px] text-violet-500 mt-0.5 leading-tight">{ROL_INFO.ADMIN.descripcion}</p>
             </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              El rol <strong>Scanner</strong> pertenece a la app <strong>Rutas</strong>, no a Trabunda.
+            </p>
           </div>
 
           {/* Username */}
