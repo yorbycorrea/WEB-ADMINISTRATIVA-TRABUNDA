@@ -95,6 +95,16 @@ export function apiGetTrabundaReporteDetalle(id) {
   return apiFetch(`/dashboard/trabunda/reportes/${id}/detalle`);
 }
 
+// ─── Admin Trabunda (solo superadmin) ────────────────────────────────────────
+
+// Crea un usuario ADMIN o SCANNER en el backend de Trabunda
+export function apiCrearUsuarioTrabunda({ username, nombre, password, rol }) {
+  return apiFetch('/dashboard/trabunda/admin/usuarios', {
+    method: 'POST',
+    body: JSON.stringify({ username, nombre, password, rol }),
+  });
+}
+
 // ─── Admin Rutas (solo superadmin) ────────────────────────────────────────────
 
 // Listar todas las rutas del sistema (con filtro opcional por activo: 0 | 1)

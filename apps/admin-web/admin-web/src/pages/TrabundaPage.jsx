@@ -2,10 +2,14 @@ import { useState, useEffect } from 'react';
 import {
   RefreshCw, Clock, Users, FileText, CheckCircle, XCircle,
   AlertCircle, Database, Search, ChevronLeft, ChevronRight,
-  Download,
+  Download, Plus, Eye, EyeOff, Shield, UserPlus, Copy, Check,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { apiGetTrabundaDashboard, apiGetTrabundaReportes, apiGetTrabundaReporteDetalle } from '../api/gateway';
+import { useAuth } from '../context/AuthContext';
+import {
+  apiGetTrabundaDashboard, apiGetTrabundaReportes, apiGetTrabundaReporteDetalle,
+  apiCrearUsuarioTrabunda,
+} from '../api/gateway';
 import { exportToPDF, exportToExcel, exportReporteDetallePDF, exportReporteDetalleExcel } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -512,9 +516,331 @@ function TabReportes() {
   );
 }
 
+// ─── Modal: Crear usuario Trabunda ────────────────────────────────────────────
+
+const ROL_INFO = {
+  ADMIN: {
+    label: 'Administrador',
+    descripcion: 'Puede crear y gestionar todos los reportes del sistema Trabunda.',
+    color: 'violet',
+  },
+  SCANNER: {
+    label: 'Scanner',
+    descripcion: 'Acceso al módulo de escaneo y operaciones de campo.',
+    color: 'blue',
+  },
+};
+
+function ModalCrearUsuario({ onClose, onCreated }) {
+  const [form, setForm]         = useState({ username: '', nombre: '', password: '', rol: 'ADMIN' });
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.username.trim() || !form.password.trim()) {
+      setError('Usuario y contraseña son obligatorios');
+      return;
+    }
+    if (form.password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    setLoading(true); setError(null);
+    try {
+      const res = await apiCrearUsuarioTrabunda({
+        username: form.username.trim().toLowerCase(),
+        nombre:   form.nombre.trim() || undefined,
+        password: form.password,
+        rol:      form.rol,
+      });
+      if (res?.ok === false) throw new Error(res.error ?? res.message ?? 'Error al crear el usuario');
+      onCreated({ username: form.username.trim().toLowerCase(), nombre: form.nombre.trim(), rol: form.rol });
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+
+  const rolInfo = ROL_INFO[form.rol];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+              <UserPlus size={18} className="text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Nuevo usuario Trabunda</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Se creará en el backend de Trabunda</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-all">
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertCircle size={15} className="text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
+          {/* Rol */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Rol <span className="text-red-400">*</span></label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(ROL_INFO).map(([key, info]) => (
+                <button key={key} type="button"
+                  onClick={() => setForm(p => ({ ...p, rol: key }))}
+                  className={`p-3 rounded-xl border-2 text-left transition-all
+                    ${form.rol === key
+                      ? key === 'ADMIN' ? 'border-violet-500 bg-violet-50' : 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}>
+                  <p className={`text-xs font-bold ${form.rol === key ? (key === 'ADMIN' ? 'text-violet-700' : 'text-blue-700') : 'text-slate-600'}`}>
+                    {info.label}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">{info.descripcion}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Username */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">
+              Usuario <span className="text-red-400">*</span>
+            </label>
+            <input type="text" value={form.username}
+              onChange={e => setForm(p => ({ ...p, username: e.target.value.toLowerCase().replace(/\s/g, '') }))}
+              placeholder="Ej: planillero01"
+              maxLength={50} autoComplete="off"
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+            <p className="text-[11px] text-slate-400 mt-1">Solo letras, números y guiones bajos. Sin espacios.</p>
+          </div>
+
+          {/* Nombre */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">
+              Nombre completo <span className="text-slate-300">(opcional)</span>
+            </label>
+            <input type="text" value={form.nombre}
+              onChange={e => setForm(p => ({ ...p, nombre: e.target.value }))}
+              placeholder="Ej: Juan García"
+              maxLength={100}
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          {/* Contraseña */}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">
+              Contraseña <span className="text-red-400">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={form.password}
+                onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                placeholder="Mínimo 6 caracteres"
+                minLength={6} maxLength={100} autoComplete="new-password"
+                className="w-full px-3 py-2.5 pr-10 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <button type="button" onClick={() => setShowPass(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Botones */}
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="flex-1 py-2.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50">
+              {loading ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+              {loading ? 'Creando...' : 'Crear usuario'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tarjeta de usuario creado ────────────────────────────────────────────────
+
+function UsuarioCreatedCard({ user, onDismiss }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(user.username).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const info = ROL_INFO[user.rol] ?? { label: user.rol, color: 'slate' };
+  const colors = {
+    violet: { bg: 'bg-violet-50', border: 'border-violet-200', badge: 'bg-violet-100 text-violet-700', icon: 'text-violet-500' },
+    blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',   badge: 'bg-blue-100 text-blue-700',     icon: 'text-blue-500'   },
+    slate:  { bg: 'bg-slate-50',  border: 'border-slate-200',  badge: 'bg-slate-100 text-slate-600',   icon: 'text-slate-400'  },
+  };
+  const c = colors[info.color] ?? colors.slate;
+
+  return (
+    <div className={`${c.bg} border ${c.border} rounded-2xl p-5 flex items-start gap-4`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${c.bg}`}>
+        <CheckCircle size={20} className={c.icon} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-800">Usuario creado correctamente</p>
+        <div className="flex items-center gap-2 mt-1">
+          <code className="text-sm font-mono text-slate-700 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+            {user.username}
+          </code>
+          <button onClick={handleCopy} className="text-slate-400 hover:text-slate-600 transition-colors" title="Copiar usuario">
+            {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+          </button>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.badge}`}>{info.label}</span>
+        </div>
+        {user.nombre && <p className="text-xs text-slate-500 mt-1">{user.nombre}</p>}
+      </div>
+      <button onClick={onDismiss} className="text-slate-300 hover:text-slate-500 transition-colors flex-shrink-0">
+        <XCircle size={16} />
+      </button>
+    </div>
+  );
+}
+
+// ─── Tab: Usuarios (solo superadmin) ─────────────────────────────────────────
+
+function TabUsuarios({ data }) {
+  const [showModal,     setShowModal]     = useState(false);
+  const [createdUsers,  setCreatedUsers]  = useState([]);
+
+  const usuariosExistentes = data?.usuarios?.users ?? data?.usuarios?.data ?? [];
+
+  function handleCreated(user) {
+    setShowModal(false);
+    setCreatedUsers(prev => [user, ...prev]);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header zona admin */}
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
+        <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Shield size={18} className="text-blue-600" />
+        </div>
+        <div>
+          <p className="font-bold text-blue-800 text-sm">Gestión de Usuarios — Trabunda</p>
+          <p className="text-xs text-blue-500 mt-0.5">Los usuarios creados aquí acceden directamente a la app Trabunda (no al AdminSuite)</p>
+        </div>
+      </div>
+
+      {/* Roles disponibles */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {Object.entries(ROL_INFO).map(([key, info]) => {
+          const isViolet = info.color === 'violet';
+          return (
+            <div key={key} className={`rounded-2xl border p-5 ${isViolet ? 'bg-violet-50 border-violet-200' : 'bg-blue-50 border-blue-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isViolet ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {key}
+                </span>
+                <span className={`font-bold text-sm ${isViolet ? 'text-violet-800' : 'text-blue-800'}`}>{info.label}</span>
+              </div>
+              <p className={`text-xs leading-relaxed ${isViolet ? 'text-violet-600' : 'text-blue-600'}`}>{info.descripcion}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Usuarios recién creados en esta sesión */}
+      {createdUsers.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Creados en esta sesión</h3>
+          {createdUsers.map((u, i) => (
+            <UsuarioCreatedCard key={i} user={u} onDismiss={() => setCreatedUsers(prev => prev.filter((_, idx) => idx !== i))} />
+          ))}
+        </div>
+      )}
+
+      {/* Botón crear */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-bold text-slate-800">Usuarios del sistema Trabunda</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {usuariosExistentes.length > 0
+                ? `${usuariosExistentes.length} usuario${usuariosExistentes.length !== 1 ? 's' : ''} activos (planilleros y admins)`
+                : 'Sin usuarios registrados aún'}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
+          >
+            <Plus size={14} /> Nuevo usuario
+          </button>
+        </div>
+
+        {usuariosExistentes.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+            <Users size={32} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No hay usuarios registrados</p>
+            <p className="text-xs mt-1 text-slate-300">Crea el primer usuario con el botón de arriba</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {['Usuario', 'Nombre', 'Rol'].map(col => (
+                    <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {usuariosExistentes.map((u, i) => (
+                  <tr key={u.id ?? u.username ?? i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                    <td className="px-4 py-3 font-mono text-slate-800 text-sm">{u.username ?? u.nombre ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-600">{u.nombre ?? u.display_name ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full
+                        ${u.rol === 'ADMIN'      ? 'bg-violet-100 text-violet-700' :
+                          u.rol === 'SCANNER'    ? 'bg-blue-100 text-blue-700' :
+                          u.rol === 'PLANILLERO' ? 'bg-emerald-100 text-emerald-700' :
+                          'bg-slate-100 text-slate-600'}`}>
+                        {u.rol ?? '—'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showModal && <ModalCrearUsuario onClose={() => setShowModal(false)} onCreated={handleCreated} />}
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function TrabundaPage() {
+  const { user }     = useAuth();
+  const isSuperadmin = user?.role === 'superadmin';
+
   const [tab,        setTab]        = useState('resumen');
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
@@ -522,17 +848,13 @@ export default function TrabundaPage() {
   const [lastUpdate, setLastUpdate] = useState(null);
 
   async function fetchDashboard() {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const res = await apiGetTrabundaDashboard();
       setData(res);
       setLastUpdate(new Date().toLocaleTimeString());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -544,6 +866,7 @@ export default function TrabundaPage() {
   const TABS = [
     { id: 'resumen',  label: 'Resumen'  },
     { id: 'reportes', label: 'Reportes' },
+    ...(isSuperadmin ? [{ id: 'usuarios', label: 'Usuarios', badge: 'SA' }] : []),
   ];
 
   return (
@@ -560,13 +883,16 @@ export default function TrabundaPage() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all
+                className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all
                   ${tab === t.id
                     ? 'bg-white text-slate-800 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
                   }`}
               >
                 {t.label}
+                {t.badge && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full font-bold leading-none">{t.badge}</span>
+                )}
               </button>
             ))}
           </div>
@@ -600,6 +926,7 @@ export default function TrabundaPage() {
         {/* ── Contenido del tab activo ───────────────────────────── */}
         {tab === 'resumen'  && <TabResumen data={data} loading={loading} />}
         {tab === 'reportes' && <TabReportes />}
+        {tab === 'usuarios' && isSuperadmin && <TabUsuarios data={data} />}
 
       </div>
     </Layout>

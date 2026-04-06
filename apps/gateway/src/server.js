@@ -193,6 +193,24 @@ app.delete("/admin/users/:id", verifyToken, requireSuperadmin, async (req, res) 
 });
 
 
+// ─── ADMIN TRABUNDA: Crear usuario en el backend de Trabunda (solo superadmin) ─
+app.post("/dashboard/trabunda/admin/usuarios", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Trabunda no configurado en .env" });
+  }
+  try {
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/admin/usuarios`, {
+      method: "POST",
+      body: JSON.stringify(req.body),
+    });
+    res.status(data.ok === false ? 409 : 201).json(data);
+  } catch (err) {
+    res.status(502).json({ ok: false, error: "No se pudo crear el usuario en Trabunda", detail: err.message });
+  }
+});
+
+
 // ─── DASHBOARD DE TRABUNDA (requiere permiso "trabunda") ─────────────────────
 app.get("/dashboard/trabunda", verifyToken, requirePermission("trabunda"), async (_req, res) => {
   const base = process.env.TRABUNDA_BACKEND_URL;
