@@ -353,6 +353,73 @@ app.get("/dashboard/rutas", verifyToken, requirePermission("rutas"), async (_req
 });
 
 
+// ─── ADMIN RUTAS: Listar rutas (solo superadmin) ─────────────────────────────
+app.get("/dashboard/rutas/admin/rutas", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Rutas no configurado en .env" });
+  }
+  try {
+    const params = req.query.activo !== undefined ? `?activo=${req.query.activo}` : "";
+    const data = await fetchService(getRutasToken, "rutas", `${base}/rutas${params}`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener las rutas", detail: err.message });
+  }
+});
+
+// ─── ADMIN RUTAS: Crear ruta (solo superadmin) ────────────────────────────────
+app.post("/dashboard/rutas/admin/rutas", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/rutas`, {
+      method: "POST",
+      body: JSON.stringify(req.body),
+    });
+    res.status(data.ok === false ? 409 : 201).json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo crear la ruta", detail: err.message });
+  }
+});
+
+// ─── ADMIN RUTAS: Activar/Desactivar ruta (solo superadmin) ──────────────────
+app.put("/dashboard/rutas/admin/rutas/:id/toggle", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/rutas/${req.params.id}/toggle-activo`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo actualizar la ruta", detail: err.message });
+  }
+});
+
+// ─── ADMIN RUTAS: Trabajadores escaneados sin área asignada (solo superadmin) ─
+app.get("/dashboard/rutas/admin/trabajadores-sin-area", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const params = new URLSearchParams();
+    if (req.query.fecha)   params.set("fecha",   req.query.fecha);
+    if (req.query.id_ruta) params.set("id_ruta", req.query.id_ruta);
+    const data = await fetchService(getRutasToken, "rutas", `${base}/admin/trabajadores-sin-area?${params}`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener trabajadores sin área", detail: err.message });
+  }
+});
+
+
 // ─── REPORTES DE RUTAS: lista de jornadas ────────────────────────────────────
 // Filtros: fecha (requerido), id_turno, id_ruta, placa, estado, limit, offset
 app.get("/dashboard/rutas/reportes", verifyToken, requirePermission("rutas"), async (req, res) => {

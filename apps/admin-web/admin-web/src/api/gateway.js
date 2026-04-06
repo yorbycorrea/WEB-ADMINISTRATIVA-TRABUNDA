@@ -95,6 +95,38 @@ export function apiGetTrabundaReporteDetalle(id) {
   return apiFetch(`/dashboard/trabunda/reportes/${id}/detalle`);
 }
 
+// ─── Admin Rutas (solo superadmin) ────────────────────────────────────────────
+
+// Listar todas las rutas del sistema (con filtro opcional por activo: 0 | 1)
+export function apiGetRutasAdminRutas(activo) {
+  const qs = activo !== undefined ? `?activo=${activo}` : '';
+  return apiFetch(`/dashboard/rutas/admin/rutas${qs}`);
+}
+
+// Crear nueva ruta
+export function apiCreateRuta({ codigo, nombre, descripcion }) {
+  return apiFetch('/dashboard/rutas/admin/rutas', {
+    method: 'POST',
+    body: JSON.stringify({ codigo, nombre, descripcion }),
+  });
+}
+
+// Activar (activo=1) o desactivar (activo=0) una ruta
+export function apiToggleRuta(id, activo) {
+  return apiFetch(`/dashboard/rutas/admin/rutas/${id}/toggle`, {
+    method: 'PUT',
+    body: JSON.stringify({ activo }),
+  });
+}
+
+// Trabajadores escaneados en la fecha dada pero sin id_area asignado
+export function apiGetTrabajadoresSinArea({ fecha, id_ruta } = {}) {
+  const params = new URLSearchParams();
+  if (fecha)   params.set('fecha',   fecha);
+  if (id_ruta) params.set('id_ruta', id_ruta);
+  return apiFetch(`/dashboard/rutas/admin/trabajadores-sin-area?${params}`);
+}
+
 // ─── Gestión de usuarios (solo superadmin) ────────────────────────────────────
 
 export function apiGetUsers() {

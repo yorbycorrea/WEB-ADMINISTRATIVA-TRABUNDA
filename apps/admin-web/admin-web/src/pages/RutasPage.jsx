@@ -3,6 +3,7 @@ import {
   RefreshCw, Truck, Users, ScanLine, CheckCircle, XCircle, AlertCircle,
   Database, Search, X, ChevronLeft, ChevronRight,
   FileText, FileSpreadsheet, Eye, Settings, LayoutDashboard, BarChart2, Shield,
+  Plus, Power, AlertTriangle, MapPin,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +12,10 @@ import {
   apiGetRutasReportes,
   apiGetRutasJornadaResumen,
   apiGetRutasJornadaDetalle,
+  apiGetRutasAdminRutas,
+  apiCreateRuta,
+  apiToggleRuta,
+  apiGetTrabajadoresSinArea,
 } from '../api/gateway';
 import {
   exportRutasJornadasPDF,
@@ -52,12 +57,7 @@ function fmtHoraISO(val) {
 // ─── UI compartida ────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, sub, color = 'blue' }) {
-  const colors = {
-    blue:    'text-blue-600',
-    emerald: 'text-emerald-600',
-    violet:  'text-violet-600',
-    amber:   'text-amber-600',
-  };
+  const colors = { blue: 'text-blue-600', emerald: 'text-emerald-600', violet: 'text-violet-600', amber: 'text-amber-600' };
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{label}</p>
@@ -157,14 +157,10 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        {/* Header del modal */}
         <div className="flex items-center justify-between p-6 border-b border-slate-100 flex-shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              Jornada #{jornada.id_jornada} — Control de Movilidad
-            </h2>
+            <h2 className="text-lg font-bold text-slate-800">Jornada #{jornada.id_jornada} — Control de Movilidad</h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-slate-500">{fmtFechaCorta(jornada.fecha)}</span>
               <span className="text-slate-300">·</span>
@@ -174,30 +170,18 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onPDF}
-              disabled={loading}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-50"
-            >
+            <button onClick={onPDF}   disabled={loading} className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-50">
               <FileText size={14} /> PDF
             </button>
-            <button
-              onClick={onExcel}
-              disabled={loading}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-50"
-            >
+            <button onClick={onExcel} disabled={loading} className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-50">
               <FileSpreadsheet size={14} /> Excel
             </button>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
-            >
+            <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all">
               <X size={18} />
             </button>
           </div>
         </div>
 
-        {/* Cuerpo */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center p-12">
             <div className="text-center">
@@ -207,15 +191,13 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {/* Info + stats */}
             <div className="p-6 border-b border-slate-100 space-y-4">
-              {/* Datos de la jornada */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { label: 'ID Turno',  value: jornada.id_turno ?? '—' },
-                  { label: 'ID Ruta',   value: jornada.id_ruta  ?? '—' },
-                  { label: 'Empresa',   value: `#${jornada.id_empresa_transporte ?? '—'}` },
-                  { label: 'Sesiones',  value: stats?.sesiones_involucradas ?? '—' },
+                  { label: 'ID Turno', value: jornada.id_turno ?? '—' },
+                  { label: 'ID Ruta',  value: jornada.id_ruta  ?? '—' },
+                  { label: 'Empresa',  value: `#${jornada.id_empresa_transporte ?? '—'}` },
+                  { label: 'Sesiones', value: stats?.sesiones_involucradas ?? '—' },
                 ].map(item => (
                   <div key={item.label} className="bg-slate-50 rounded-xl p-3">
                     <p className="text-xs text-slate-400 mb-0.5">{item.label}</p>
@@ -223,8 +205,6 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
                   </div>
                 ))}
               </div>
-
-              {/* Estadísticas */}
               {stats && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
@@ -242,8 +222,6 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
                 </div>
               )}
             </div>
-
-            {/* Tabla de trabajadores */}
             <div className="p-6">
               <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-4">
                 Trabajadores marcados ({trabajadores.length})
@@ -259,9 +237,7 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
                         {['N°', 'DNI', 'Apellidos y Nombres', 'Cargo', 'Hora', 'Origen'].map(col => (
-                          <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                            {col}
-                          </th>
+                          <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
                         ))}
                       </tr>
                     </thead>
@@ -296,7 +272,6 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
 
 function TabReportesRutas() {
   const today = new Date().toISOString().split('T')[0];
-
   const [filters, setFilters] = useState({ fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' });
   const [applied, setApplied] = useState({ fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' });
   const [jornadas, setJornadas] = useState([]);
@@ -304,59 +279,33 @@ function TabReportesRutas() {
   const [error,    setError]    = useState(null);
   const [offset,   setOffset]   = useState(0);
   const [hasMore,  setHasMore]  = useState(false);
-
-  // Modal
-  const [modal, setModal] = useState(null);
+  const [modal,    setModal]    = useState(null);
 
   const fetchReportes = useCallback(async (f, off) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const res = await apiGetRutasReportes({
-        fecha:    f.fecha    || undefined,
-        id_turno: f.id_turno || undefined,
-        id_ruta:  f.id_ruta  || undefined,
-        placa:    f.placa    || undefined,
-        estado:   f.estado   || undefined,
-        limit:    LIMIT,
-        offset:   off,
+        fecha: f.fecha || undefined, id_turno: f.id_turno || undefined,
+        id_ruta: f.id_ruta || undefined, placa: f.placa || undefined,
+        estado: f.estado || undefined, limit: LIMIT, offset: off,
       });
       if (res?.ok === false || res?.error) {
         setError(res.error ?? res.message ?? 'Error al cargar reportes');
-        setJornadas([]);
-        setHasMore(false);
+        setJornadas([]); setHasMore(false);
       } else {
         const items = res.items ?? [];
-        setJornadas(items);
-        setHasMore(items.length === LIMIT);
+        setJornadas(items); setHasMore(items.length === LIMIT);
       }
-    } catch (e) {
-      setError(e.message);
-      setJornadas([]);
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(e.message); setJornadas([]); setHasMore(false); }
+    finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    fetchReportes(applied, offset);
-  }, [applied, offset, fetchReportes]);
+  useEffect(() => { fetchReportes(applied, offset); }, [applied, offset, fetchReportes]);
 
-  function handleBuscar() {
-    setOffset(0);
-    setApplied({ ...filters });
-  }
-
+  function handleBuscar() { setOffset(0); setApplied({ ...filters }); }
   function handleLimpiar() {
     const clean = { fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' };
-    setFilters(clean);
-    setApplied(clean);
-    setOffset(0);
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter') handleBuscar();
+    setFilters(clean); setApplied(clean); setOffset(0);
   }
 
   async function openModal(jornada) {
@@ -367,28 +316,19 @@ function TabReportesRutas() {
         apiGetRutasJornadaDetalle(jornada.id_jornada),
       ]);
       setModal({ jornada, resumen: r, detalle: d, loading: false });
-    } catch (e) {
-      setModal(prev => ({ ...prev, loading: false }));
-    }
+    } catch { setModal(prev => ({ ...prev, loading: false })); }
   }
 
-  async function quickExportPDF(jornada) {
-    const [r, d] = await Promise.all([
-      apiGetRutasJornadaResumen(jornada.id_jornada),
-      apiGetRutasJornadaDetalle(jornada.id_jornada),
-    ]);
-    exportRutasJornadaDetallePDF(jornada, r?.resumen ?? null, d?.items ?? []);
+  async function quickExportPDF(j) {
+    const [r, d] = await Promise.all([apiGetRutasJornadaResumen(j.id_jornada), apiGetRutasJornadaDetalle(j.id_jornada)]);
+    exportRutasJornadaDetallePDF(j, r?.resumen ?? null, d?.items ?? []);
+  }
+  async function quickExportExcel(j) {
+    const [r, d] = await Promise.all([apiGetRutasJornadaResumen(j.id_jornada), apiGetRutasJornadaDetalle(j.id_jornada)]);
+    exportRutasJornadaDetalleExcel(j, r?.resumen ?? null, d?.items ?? []);
   }
 
-  async function quickExportExcel(jornada) {
-    const [r, d] = await Promise.all([
-      apiGetRutasJornadaResumen(jornada.id_jornada),
-      apiGetRutasJornadaDetalle(jornada.id_jornada),
-    ]);
-    exportRutasJornadaDetalleExcel(jornada, r?.resumen ?? null, d?.items ?? []);
-  }
-
-  const hasPrev    = offset > 0;
+  const hasPrev     = offset > 0;
   const currentPage = Math.floor(offset / LIMIT) + 1;
 
   return (
@@ -396,116 +336,71 @@ function TabReportesRutas() {
       {/* Filtros */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h2 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-4">Filtros de búsqueda</h2>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">Fecha <span className="text-red-400">*</span></label>
-            <input
-              type="date"
-              value={filters.fecha}
-              onChange={e => setFilters(p => ({ ...p, fecha: e.target.value }))}
-              onKeyDown={handleKeyDown}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            <input type="date" value={filters.fecha} onChange={e => setFilters(p => ({ ...p, fecha: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleBuscar()}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">Estado</label>
-            <select
-              value={filters.estado}
-              onChange={e => setFilters(p => ({ ...p, estado: e.target.value }))}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
+            <select value={filters.estado} onChange={e => setFilters(p => ({ ...p, estado: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">Todos</option>
               <option value="ABIERTA">Abierta</option>
               <option value="EN_PROCESO">En Proceso</option>
               <option value="FINALIZADA">Finalizada</option>
             </select>
           </div>
-
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">Placa</label>
-            <input
-              type="text"
-              value={filters.placa}
+            <input type="text" value={filters.placa}
               onChange={e => setFilters(p => ({ ...p, placa: e.target.value.toUpperCase() }))}
-              onKeyDown={handleKeyDown}
-              placeholder="Ej: P16-752"
-              maxLength={10}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono uppercase placeholder:font-sans placeholder:normal-case"
-            />
+              onKeyDown={e => e.key === 'Enter' && handleBuscar()}
+              placeholder="Ej: P16-752" maxLength={10}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase placeholder:font-sans placeholder:normal-case" />
           </div>
-
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">ID Turno</label>
-            <input
-              type="number"
-              value={filters.id_turno}
+            <input type="number" value={filters.id_turno} min={1}
               onChange={e => setFilters(p => ({ ...p, id_turno: e.target.value }))}
-              onKeyDown={handleKeyDown}
-              placeholder="Ej: 1"
-              min={1}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+              onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Ej: 1"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-
           <div>
             <label className="text-xs font-medium text-slate-500 mb-1 block">ID Ruta</label>
-            <input
-              type="number"
-              value={filters.id_ruta}
+            <input type="number" value={filters.id_ruta} min={1}
               onChange={e => setFilters(p => ({ ...p, id_ruta: e.target.value }))}
-              onKeyDown={handleKeyDown}
-              placeholder="Ej: 2"
-              min={1}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+              onKeyDown={e => e.key === 'Enter' && handleBuscar()} placeholder="Ej: 2"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
-
-        {/* Acciones */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleBuscar}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 shadow-sm shadow-blue-200"
-            >
-              <Search size={14} />
-              Buscar
+            <button onClick={handleBuscar} disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 shadow-sm shadow-blue-200">
+              <Search size={14} /> Buscar
             </button>
-            <button
-              onClick={handleLimpiar}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
-            >
-              <X size={14} />
-              Limpiar
+            <button onClick={handleLimpiar} disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50">
+              <X size={14} /> Limpiar
             </button>
           </div>
-
-          {/* Exportar lista completa */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 mr-1">Exportar lista:</span>
-            <button
-              onClick={() => exportRutasJornadasPDF(jornadas, applied.fecha)}
-              disabled={loading || jornadas.length === 0}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-40"
-            >
+            <button onClick={() => exportRutasJornadasPDF(jornadas, applied.fecha)} disabled={loading || jornadas.length === 0}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-40">
               <FileText size={14} /> PDF
             </button>
-            <button
-              onClick={() => exportRutasJornadasExcel(jornadas, applied.fecha)}
-              disabled={loading || jornadas.length === 0}
-              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-40"
-            >
+            <button onClick={() => exportRutasJornadasExcel(jornadas, applied.fecha)} disabled={loading || jornadas.length === 0}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-40">
               <FileSpreadsheet size={14} /> Excel
             </button>
           </div>
         </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
           <XCircle size={18} className="text-red-500 flex-shrink-0" />
@@ -516,26 +411,20 @@ function TabReportesRutas() {
         </div>
       )}
 
-      {/* Tabla de jornadas */}
+      {/* Tabla */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <p className="text-sm text-slate-500">
-            {loading
-              ? 'Cargando jornadas...'
-              : `${jornadas.length} jornada${jornadas.length !== 1 ? 's' : ''} encontrada${jornadas.length !== 1 ? 's' : ''}`
-            }
+            {loading ? 'Cargando jornadas...' : `${jornadas.length} jornada${jornadas.length !== 1 ? 's' : ''} encontrada${jornadas.length !== 1 ? 's' : ''}`}
           </p>
           {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 {['ID', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones', 'Acciones'].map(col => (
-                  <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    {col}
-                  </th>
+                  <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr>
             </thead>
@@ -571,27 +460,9 @@ function TabReportesRutas() {
                     <td className="px-4 py-3 text-center text-slate-500">{j.sesiones_involucradas ?? 0}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => openModal(j)}
-                          title="Ver detalle"
-                          className="p-2 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                        >
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          onClick={() => quickExportPDF(j)}
-                          title="Descargar PDF"
-                          className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                        >
-                          <FileText size={14} />
-                        </button>
-                        <button
-                          onClick={() => quickExportExcel(j)}
-                          title="Descargar Excel"
-                          className="p-2 rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
-                        >
-                          <FileSpreadsheet size={14} />
-                        </button>
+                        <button onClick={() => openModal(j)} title="Ver detalle" className="p-2 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"><Eye size={14} /></button>
+                        <button onClick={() => quickExportPDF(j)}   title="Descargar PDF"   className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"><FileText size={14} /></button>
+                        <button onClick={() => quickExportExcel(j)} title="Descargar Excel" className="p-2 rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"><FileSpreadsheet size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -600,26 +471,16 @@ function TabReportesRutas() {
             </tbody>
           </table>
         </div>
-
-        {/* Paginación */}
         {(hasPrev || hasMore) && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
-            <p className="text-xs text-slate-400">
-              Página {currentPage} · Mostrando {offset + 1}–{offset + jornadas.length}
-            </p>
+            <p className="text-xs text-slate-400">Página {currentPage} · Mostrando {offset + 1}–{offset + jornadas.length}</p>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setOffset(o => Math.max(0, o - LIMIT))}
-                disabled={!hasPrev || loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all"
-              >
+              <button onClick={() => setOffset(o => Math.max(0, o - LIMIT))} disabled={!hasPrev || loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all">
                 <ChevronLeft size={14} /> Anterior
               </button>
-              <button
-                onClick={() => setOffset(o => o + LIMIT)}
-                disabled={!hasMore || loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all"
-              >
+              <button onClick={() => setOffset(o => o + LIMIT)} disabled={!hasMore || loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all">
                 Siguiente <ChevronRight size={14} />
               </button>
             </div>
@@ -627,18 +488,463 @@ function TabReportesRutas() {
         )}
       </div>
 
-      {/* Modal */}
       {modal && (
         <JornadaModal
-          jornada={modal.jornada}
-          resumen={modal.resumen}
-          detalle={modal.detalle}
-          loading={modal.loading}
+          jornada={modal.jornada} resumen={modal.resumen} detalle={modal.detalle} loading={modal.loading}
           onClose={() => setModal(null)}
           onPDF={() => exportRutasJornadaDetallePDF(modal.jornada, modal.resumen?.resumen ?? null, modal.detalle?.items ?? [])}
           onExcel={() => exportRutasJornadaDetalleExcel(modal.jornada, modal.resumen?.resumen ?? null, modal.detalle?.items ?? [])}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Admin: Modal crear ruta ──────────────────────────────────────────────────
+
+function ModalCrearRuta({ onClose, onCreated }) {
+  const [form, setForm]       = useState({ codigo: '', nombre: '', descripcion: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.codigo.trim() || !form.nombre.trim()) {
+      setError('Código y nombre son obligatorios');
+      return;
+    }
+    setLoading(true); setError(null);
+    try {
+      const res = await apiCreateRuta({
+        codigo: form.codigo.trim().toUpperCase(),
+        nombre: form.nombre.trim(),
+        descripcion: form.descripcion.trim() || undefined,
+      });
+      if (res?.ok === false) throw new Error(res.message ?? res.error ?? 'Error al crear la ruta');
+      onCreated();
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+          <h2 className="text-lg font-bold text-slate-800">Nueva Ruta</h2>
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-all"><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+              <AlertTriangle size={15} className="text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">Código <span className="text-red-400">*</span></label>
+            <input
+              type="text" value={form.codigo}
+              onChange={e => setForm(p => ({ ...p, codigo: e.target.value.toUpperCase() }))}
+              placeholder="Ej: R-01"
+              maxLength={20}
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono uppercase"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">Nombre <span className="text-red-400">*</span></label>
+            <input
+              type="text" value={form.nombre}
+              onChange={e => setForm(p => ({ ...p, nombre: e.target.value }))}
+              placeholder="Ej: Ruta Norte - Planta A"
+              maxLength={100}
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-500 mb-1.5 block uppercase tracking-wide">Descripción <span className="text-slate-300">(opcional)</span></label>
+            <textarea
+              value={form.descripcion}
+              onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))}
+              placeholder="Descripción breve de la ruta..."
+              rows={3} maxLength={255}
+              className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="flex-1 py-2.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50">
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-all disabled:opacity-50">
+              {loading ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+              {loading ? 'Creando...' : 'Crear Ruta'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin: Sección gestión de rutas ─────────────────────────────────────────
+
+function SeccionGestionRutas() {
+  const [rutas,      setRutas]      = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
+  const [toggling,   setToggling]   = useState(null);
+  const [showModal,  setShowModal]  = useState(false);
+  const [filtroActivo, setFiltroActivo] = useState('todos'); // 'todos' | 'activas' | 'inactivas'
+
+  async function loadRutas() {
+    setLoading(true); setError(null);
+    try {
+      const res = await apiGetRutasAdminRutas();
+      if (res?.ok === false) throw new Error(res.error ?? 'Error al cargar rutas');
+      setRutas(res.rutas ?? []);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { loadRutas(); }, []);
+
+  async function handleToggle(ruta) {
+    setToggling(ruta.id_ruta);
+    setError(null);
+    try {
+      const nuevoActivo = ruta.activo ? 0 : 1;
+      const res = await apiToggleRuta(ruta.id_ruta, nuevoActivo);
+      if (res?.ok === false) throw new Error(res.message ?? 'Error al actualizar');
+      setRutas(prev => prev.map(r => r.id_ruta === ruta.id_ruta ? { ...r, activo: nuevoActivo } : r));
+    } catch (e) { setError(e.message); }
+    finally { setToggling(null); }
+  }
+
+  const rutasFiltradas = rutas.filter(r => {
+    if (filtroActivo === 'activas')   return !!r.activo;
+    if (filtroActivo === 'inactivas') return !r.activo;
+    return true;
+  });
+
+  const activas   = rutas.filter(r => !!r.activo).length;
+  const inactivas = rutas.length - activas;
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="font-bold text-slate-800">Rutas del sistema</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {rutas.length} total · <span className="text-emerald-600 font-medium">{activas} activas</span> · <span className="text-slate-400">{inactivas} inactivas</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Filtro rápido */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            {[
+              { key: 'todos',     label: 'Todas' },
+              { key: 'activas',   label: 'Activas' },
+              { key: 'inactivas', label: 'Inactivas' },
+            ].map(f => (
+              <button key={f.key} onClick={() => setFiltroActivo(f.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                  ${filtroActivo === f.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-all shadow-sm shadow-violet-200"
+          >
+            <Plus size={14} /> Nueva Ruta
+          </button>
+          <button onClick={loadRutas} disabled={loading} className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-all disabled:opacity-50">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+          <XCircle size={15} className="text-red-500 flex-shrink-0" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Lista de rutas */}
+      {loading && rutas.length === 0 ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 bg-white rounded-xl border border-slate-200 animate-pulse" />
+          ))}
+        </div>
+      ) : rutasFiltradas.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
+          <Truck size={32} className="mx-auto mb-2 opacity-30" />
+          <p className="text-sm">{rutas.length === 0 ? 'No hay rutas registradas' : 'No hay rutas con ese filtro'}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {rutasFiltradas.map(ruta => (
+            <div key={ruta.id_ruta}
+              className={`bg-white rounded-xl border p-4 flex items-center justify-between gap-4 transition-all
+                ${ruta.activo ? 'border-slate-200 shadow-sm' : 'border-slate-100 opacity-70'}`}>
+              <div className="flex items-center gap-4 min-w-0">
+                {/* Indicador de estado */}
+                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${ruta.activo ? 'bg-emerald-500 shadow-sm shadow-emerald-300' : 'bg-slate-300'}`} />
+                {/* ID */}
+                <span className="text-xs text-slate-400 font-mono flex-shrink-0">#{ruta.id_ruta}</span>
+                {/* Código */}
+                <span className="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-lg flex-shrink-0 font-bold">
+                  {ruta.codigo}
+                </span>
+                {/* Nombre + descripción */}
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-800 truncate">{ruta.nombre}</p>
+                  {ruta.descripcion && (
+                    <p className="text-xs text-slate-400 truncate mt-0.5">{ruta.descripcion}</p>
+                  )}
+                </div>
+              </div>
+              {/* Toggle */}
+              <button
+                onClick={() => handleToggle(ruta)}
+                disabled={toggling === ruta.id_ruta}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all flex-shrink-0 disabled:opacity-60
+                  ${ruta.activo
+                    ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                  }`}
+              >
+                {toggling === ruta.id_ruta
+                  ? <RefreshCw size={12} className="animate-spin" />
+                  : <Power size={12} />
+                }
+                {toggling === ruta.id_ruta ? 'Guardando...' : ruta.activo ? 'Desactivar' : 'Activar'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showModal && (
+        <ModalCrearRuta
+          onClose={() => setShowModal(false)}
+          onCreated={() => { setShowModal(false); loadRutas(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Admin: Sección trabajadores sin área ─────────────────────────────────────
+
+function SeccionTrabajadoresSinArea() {
+  const today = new Date().toISOString().split('T')[0];
+  const [filters,   setFilters]   = useState({ fecha: today, id_ruta: '' });
+  const [applied,   setApplied]   = useState({ fecha: today, id_ruta: '' });
+  const [workers,   setWorkers]   = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState(null);
+  const [fechaRes,  setFechaRes]  = useState('');
+
+  const load = useCallback(async (f) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await apiGetTrabajadoresSinArea({
+        fecha:   f.fecha   || undefined,
+        id_ruta: f.id_ruta || undefined,
+      });
+      if (res?.ok === false) throw new Error(res.error ?? 'Error al cargar');
+      setWorkers(res.items ?? []);
+      setFechaRes(res.fecha ?? f.fecha);
+    } catch (e) { setError(e.message); setWorkers([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(applied); }, [applied, load]);
+
+  function handleBuscar() { setApplied({ ...filters }); }
+
+  return (
+    <div className="space-y-5">
+      {/* Info banner */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-amber-800">Trabajadores sin área de trabajo asignada</p>
+          <p className="text-xs text-amber-600 mt-0.5 leading-relaxed">
+            Estas personas fueron escaneadas en la fecha seleccionada pero no tienen un área asignada en el sistema
+            (<code className="bg-amber-100 px-1 rounded">id_area</code> es nulo). La asignación de área se realizará próximamente desde esta misma sección.
+          </p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <div className="flex items-end gap-3 flex-wrap">
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Fecha</label>
+            <input type="date" value={filters.fecha}
+              onChange={e => setFilters(p => ({ ...p, fecha: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleBuscar()}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">ID Ruta (opcional)</label>
+            <input type="number" value={filters.id_ruta} min={1}
+              onChange={e => setFilters(p => ({ ...p, id_ruta: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleBuscar()}
+              placeholder="Todas las rutas"
+              className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-500 w-44" />
+          </div>
+          <button onClick={handleBuscar} disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-all disabled:opacity-50">
+            <Search size={14} />
+            Buscar
+          </button>
+          {filters.id_ruta && (
+            <button onClick={() => { setFilters(p => ({ ...p, id_ruta: '' })); setApplied(p => ({ ...p, id_ruta: '' })); }}
+              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+              <X size={12} /> Quitar filtro ruta
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+          <XCircle size={15} className="text-red-500 flex-shrink-0" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Tabla */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">
+              {loading ? 'Buscando...' : `${workers.length} trabajador${workers.length !== 1 ? 'es' : ''} sin área`}
+            </p>
+            {fechaRes && !loading && (
+              <p className="text-xs text-slate-400 mt-0.5">Fecha: {fmtFechaCorta(fechaRes)}{applied.id_ruta ? ` · Ruta #${applied.id_ruta}` : ''}</p>
+            )}
+          </div>
+          {loading && <RefreshCw size={14} className="animate-spin text-violet-500" />}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                {['N°', 'DNI', 'Apellidos y Nombres', 'Cargo', 'ID Ruta', 'ID Área actual', 'Origen'].map(col => (
+                  <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && workers.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 bg-slate-200 rounded animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : workers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                    <CheckCircle size={32} className="mx-auto mb-2 text-emerald-400 opacity-60" />
+                    <p className="text-sm font-medium text-slate-500">¡Sin pendientes!</p>
+                    <p className="text-xs mt-1 text-slate-300">Todos los trabajadores escaneados tienen área asignada</p>
+                  </td>
+                </tr>
+              ) : (
+                workers.map((w, i) => (
+                  <tr key={w.id_trabajador} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                    <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i + 1}</td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{w.dni ?? '—'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800">
+                      {`${(w.apellidos ?? '').toUpperCase()} ${w.nombres ?? ''}`.trim() || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{w.cargo || '—'}</td>
+                    <td className="px-4 py-3 text-center">
+                      {w.id_ruta
+                        ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">#{w.id_ruta}</span>
+                        : <span className="text-xs text-slate-300">—</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Sin área</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{w.origen_registro ?? '—'}</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {workers.length > 0 && (
+          <div className="px-5 py-3 border-t border-slate-100 bg-amber-50 flex items-center gap-2">
+            <MapPin size={13} className="text-amber-600" />
+            <p className="text-xs text-amber-700">
+              La asignación de área para estos trabajadores estará disponible próximamente en esta misma sección.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Administración (solo superadmin) ────────────────────────────────────
+
+function TabAdminRutas() {
+  const [subTab, setSubTab] = useState('rutas'); // 'rutas' | 'sinArea'
+
+  return (
+    <div className="space-y-5">
+      {/* Header con badge SA */}
+      <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 flex items-center gap-3">
+        <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Shield size={18} className="text-violet-600" />
+        </div>
+        <div>
+          <p className="font-bold text-violet-800 text-sm">Zona de Administración</p>
+          <p className="text-xs text-violet-500 mt-0.5">Acceso restringido · Solo superadmin</p>
+        </div>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setSubTab('rutas')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+            ${subTab === 'rutas' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <Truck size={14} /> Gestión de Rutas
+        </button>
+        <button
+          onClick={() => setSubTab('sinArea')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+            ${subTab === 'sinArea' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          <MapPin size={14} /> Trabajadores sin Área
+        </button>
+      </div>
+
+      {/* Contenido */}
+      {subTab === 'rutas'   && <SeccionGestionRutas />}
+      {subTab === 'sinArea' && <SeccionTrabajadoresSinArea />}
     </div>
   );
 }
@@ -654,7 +960,6 @@ function TabDashboard({ data }) {
 
   return (
     <div className="space-y-8">
-      {/* Estado */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">Estado del sistema</h2>
         <div className="flex flex-wrap gap-3">
@@ -662,16 +967,12 @@ function TabDashboard({ data }) {
           <StatusBadge ok={totalEmpresas > 0} label="Base de datos" />
         </div>
       </div>
-
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard label="Empresas activas" value={activas}        color="blue"    sub={`de ${totalEmpresas} totales`} />
         <StatCard label="Transportistas"   value={totalTransport} color="emerald" sub="en todas las empresas" />
         <StatCard label="Jornadas activas" value="—"              color="violet"  sub="ver pestaña Reportes" />
         <StatCard label="Scans hoy"        value="—"              color="amber"   sub="ver pestaña Reportes" />
       </div>
-
-      {/* Flujo */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">Flujo de una jornada</h2>
         <div className="flex items-start gap-0 overflow-x-auto pb-2">
@@ -688,9 +989,7 @@ function TabDashboard({ data }) {
                   ${step.color === 'emerald' ? 'bg-emerald-100 text-emerald-600' : ''}
                   ${step.color === 'violet'  ? 'bg-violet-100 text-violet-600'   : ''}
                   ${step.color === 'amber'   ? 'bg-amber-100 text-amber-600'     : ''}
-                `}>
-                  {step.icon}
-                </div>
+                `}>{step.icon}</div>
                 <p className="text-xs font-bold text-slate-700 text-center mb-1">{step.title}</p>
                 <p className="text-[11px] text-slate-400 text-center leading-relaxed">{step.desc}</p>
               </div>
@@ -704,12 +1003,8 @@ function TabDashboard({ data }) {
           ))}
         </div>
       </div>
-
-      {/* Empresas */}
       <div>
-        <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">
-          Empresas de transporte ({totalEmpresas})
-        </h2>
+        <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">Empresas de transporte ({totalEmpresas})</h2>
         {empresas.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400">
             <Truck size={36} className="mx-auto mb-3 opacity-30" />
@@ -717,14 +1012,10 @@ function TabDashboard({ data }) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {empresas.map(emp => (
-              <EmpresaCard key={emp.id_empresa_transporte} empresa={emp} />
-            ))}
+            {empresas.map(emp => <EmpresaCard key={emp.id_empresa_transporte} empresa={emp} />)}
           </div>
         )}
       </div>
-
-      {/* Stack técnico */}
       <div className="bg-slate-900 rounded-2xl p-6 text-slate-400 text-sm">
         <div className="flex items-center gap-2 mb-3">
           <Database size={16} className="text-slate-500" />
@@ -741,74 +1032,26 @@ function TabDashboard({ data }) {
   );
 }
 
-// ─── Tab: Administración (solo superadmin) ────────────────────────────────────
-
-function TabAdminRutas() {
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-slate-200 p-10 shadow-sm text-center">
-        <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <Settings size={28} className="text-violet-500" />
-        </div>
-        <h3 className="font-bold text-slate-800 text-lg mb-2">Administración de Rutas</h3>
-        <p className="text-slate-500 text-sm mb-8 max-w-md mx-auto">
-          Gestión avanzada del sistema de rutas. Solo visible para superadmin.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto">
-          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 text-left cursor-not-allowed select-none">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
-                <Truck size={16} className="text-slate-400" />
-              </div>
-              <span className="font-semibold text-slate-500 text-sm">Activar / Desactivar Rutas</span>
-            </div>
-            <p className="text-xs text-slate-400 mb-3">Habilita o deshabilita rutas del sistema de transporte</p>
-            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-slate-200 text-slate-500 rounded-full font-medium">
-              Próximamente
-            </span>
-          </div>
-          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 text-left cursor-not-allowed select-none">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
-                <Database size={16} className="text-slate-400" />
-              </div>
-              <span className="font-semibold text-slate-500 text-sm">Asignar Área a Ruta</span>
-            </div>
-            <p className="text-xs text-slate-400 mb-3">Vincula áreas de trabajo con rutas de transporte específicas</p>
-            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-slate-200 text-slate-500 rounded-full font-medium">
-              Próximamente
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function RutasPage() {
   const { user }     = useAuth();
   const isSuperadmin = user?.role === 'superadmin';
 
-  const [activeTab,   setActiveTab]   = useState('dashboard');
-  const [data,        setData]        = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-  const [lastUpdate,  setLastUpdate]  = useState(null);
+  const [activeTab,  setActiveTab]  = useState('dashboard');
+  const [data,       setData]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
   async function fetchData() {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const res = await apiGetRutasDashboard();
       setData(res);
       setLastUpdate(new Date().toLocaleTimeString());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   }
 
   useEffect(() => {
@@ -820,7 +1063,7 @@ export default function RutasPage() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard',       icon: <LayoutDashboard size={15} /> },
     { id: 'reportes',  label: 'Reportes',         icon: <BarChart2 size={15} /> },
-    ...(isSuperadmin ? [{ id: 'admin', label: 'Administración', icon: <Shield size={15} /> }] : []),
+    ...(isSuperadmin ? [{ id: 'admin', label: 'Administración', icon: <Shield size={15} />, badge: 'SA' }] : []),
   ];
 
   return (
@@ -830,42 +1073,29 @@ export default function RutasPage() {
     >
       <div className="space-y-6 max-w-[1200px]">
 
-        {/* Barra superior: tabs + refresh */}
+        {/* Barra superior */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
             {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
-                  ${activeTab === tab.id
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                  }`}
-              >
+                  ${activeTab === tab.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 {tab.icon}
                 {tab.label}
-                {tab.id === 'admin' && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded-full font-bold leading-none">SA</span>
+                {tab.badge && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded-full font-bold leading-none">{tab.badge}</span>
                 )}
               </button>
             ))}
           </div>
-
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Actualizar
+          <button onClick={fetchData} disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Actualizar
           </button>
         </div>
 
-        {/* Backend no configurado */}
         {data && !data.configured && <NotConfigured />}
 
-        {/* Error de conexión */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-center gap-3">
             <XCircle size={20} className="text-red-500 flex-shrink-0" />
@@ -876,7 +1106,6 @@ export default function RutasPage() {
           </div>
         )}
 
-        {/* Skeleton inicial */}
         {loading && !data && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -885,17 +1114,14 @@ export default function RutasPage() {
           </div>
         )}
 
-        {/* Contenido por tab */}
-        {/* Reportes siempre accesible (gestiona su propio error si el backend falla) */}
+        {/* Tab: Reportes siempre accesible */}
         {activeTab === 'reportes' && <TabReportesRutas />}
 
-        {/* Dashboard y Admin solo cuando el backend está configurado */}
-        {data?.configured && (
-          <>
-            {activeTab === 'dashboard' && <TabDashboard data={data} />}
-            {activeTab === 'admin' && isSuperadmin && <TabAdminRutas />}
-          </>
-        )}
+        {/* Tab: Admin siempre accesible para superadmin (gestiona su propio estado) */}
+        {activeTab === 'admin' && isSuperadmin && <TabAdminRutas />}
+
+        {/* Tab: Dashboard solo cuando el backend está configurado */}
+        {activeTab === 'dashboard' && data?.configured && <TabDashboard data={data} />}
       </div>
     </Layout>
   );
