@@ -97,6 +97,11 @@ export function apiGetTrabundaReporteDetalle(id) {
 
 // ─── Admin Trabunda (solo superadmin) ────────────────────────────────────────
 
+// Lista todos los usuarios del backend de Trabunda (pickers con todos los roles)
+export function apiGetUsuariosTrabunda() {
+  return apiFetch('/dashboard/trabunda/admin/usuarios');
+}
+
 // Crea un usuario en el backend de Trabunda
 // roles: 'ADMINISTRADOR' | 'PLANILLERO' | 'SANEAMIENTO'
 export function apiCrearUsuarioTrabunda({ username, nombre, password, roles }) {

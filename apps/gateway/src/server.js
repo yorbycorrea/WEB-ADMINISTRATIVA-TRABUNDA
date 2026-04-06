@@ -208,6 +208,29 @@ app.delete("/admin/users/:id", verifyToken, requireSuperadmin, async (req, res) 
 });
 
 
+// ─── ADMIN TRABUNDA: Listar usuarios del backend de Trabunda (solo superadmin) ──
+// Usa el endpoint /users/pickers con todos los roles para obtener la lista completa.
+// Devuelve: [{ id, nombre, role }]
+app.get("/dashboard/trabunda/admin/usuarios", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Trabunda no configurado en .env" });
+  }
+  try {
+    const data = await fetchService(
+      getTrabundaToken, "trabunda",
+      `${base}/users/pickers?roles=PLANILLERO,ADMINISTRADOR,SANEAMIENTO`
+    );
+    res.json({ usuarios: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    console.error(`[Trabunda] Error listando usuarios:`, err.message, err.backendDetail ?? "");
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al listar usuarios", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo obtener usuarios de Trabunda", detail: err.message });
+  }
+});
+
 // ─── ADMIN TRABUNDA: Crear usuario en el backend de Trabunda (solo superadmin) ─
 // Body esperado: { username, password, nombre, roles }
 // Roles válidos: ADMINISTRADOR | PLANILLERO | SANEAMIENTO

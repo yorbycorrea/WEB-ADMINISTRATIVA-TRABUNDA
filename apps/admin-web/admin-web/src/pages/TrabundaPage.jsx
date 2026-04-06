@@ -8,7 +8,7 @@ import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import {
   apiGetTrabundaDashboard, apiGetTrabundaReportes, apiGetTrabundaReporteDetalle,
-  apiCrearUsuarioTrabunda,
+  apiCrearUsuarioTrabunda, apiGetUsuariosTrabunda,
 } from '../api/gateway';
 import { exportToPDF, exportToExcel, exportReporteDetallePDF, exportReporteDetalleExcel } from '../utils/exportUtils';
 
@@ -739,17 +739,41 @@ function UsuarioCreatedCard({ user, onDismiss }) {
   );
 }
 
+// ─── Helpers de color por rol ────────────────────────────────────────────────
+const ROL_BADGE = {
+  ADMINISTRADOR: 'bg-violet-100 text-violet-700',
+  PLANILLERO:    'bg-blue-100 text-blue-700',
+  SANEAMIENTO:   'bg-emerald-100 text-emerald-700',
+};
+
 // ─── Tab: Usuarios (solo superadmin) ─────────────────────────────────────────
 
-function TabUsuarios({ data }) {
-  const [showModal,     setShowModal]     = useState(false);
-  const [createdUsers,  setCreatedUsers]  = useState([]);
+function TabUsuarios() {
+  const [showModal,    setShowModal]    = useState(false);
+  const [usuarios,     setUsuarios]     = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [errorUsers,   setErrorUsers]   = useState(null);
+  const [createdUsers, setCreatedUsers] = useState([]);
 
-  const usuariosExistentes = data?.usuarios?.users ?? data?.usuarios?.data ?? [];
+  async function cargarUsuarios() {
+    setLoadingUsers(true);
+    setErrorUsers(null);
+    try {
+      const res = await apiGetUsuariosTrabunda();
+      setUsuarios(res?.usuarios ?? []);
+    } catch (e) {
+      setErrorUsers(e.message);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  useEffect(() => { cargarUsuarios(); }, []);
 
   function handleCreated(user) {
     setShowModal(false);
     setCreatedUsers(prev => [user, ...prev]);
+    cargarUsuarios(); // refresca la lista real
   }
 
   return (
@@ -795,26 +819,53 @@ function TabUsuarios({ data }) {
         </div>
       )}
 
-      {/* Botón crear */}
+      {/* Tabla de usuarios */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="font-bold text-slate-800">Usuarios del sistema Trabunda</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              {usuariosExistentes.length > 0
-                ? `${usuariosExistentes.length} usuario${usuariosExistentes.length !== 1 ? 's' : ''} activos (planilleros y admins)`
-                : 'Sin usuarios registrados aún'}
+              {loadingUsers
+                ? 'Cargando...'
+                : errorUsers
+                  ? 'Error al cargar usuarios'
+                  : usuarios.length > 0
+                    ? `${usuarios.length} usuario${usuarios.length !== 1 ? 's' : ''} registrado${usuarios.length !== 1 ? 's' : ''}`
+                    : 'Sin usuarios registrados aún'}
             </p>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
-          >
-            <Plus size={14} /> Nuevo usuario
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={cargarUsuarios}
+              disabled={loadingUsers}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-40"
+              title="Recargar lista"
+            >
+              <RefreshCw size={15} className={loadingUsers ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-sm shadow-blue-200"
+            >
+              <Plus size={14} /> Nuevo usuario
+            </button>
+          </div>
         </div>
 
-        {usuariosExistentes.length === 0 ? (
+        {/* Estados: cargando / error / vacío / tabla */}
+        {loadingUsers ? (
+          <div className="text-center py-10 text-slate-400">
+            <RefreshCw size={28} className="mx-auto mb-2 animate-spin opacity-40" />
+            <p className="text-sm">Cargando usuarios...</p>
+          </div>
+        ) : errorUsers ? (
+          <div className="text-center py-10 text-red-400 border border-dashed border-red-200 rounded-xl">
+            <AlertCircle size={28} className="mx-auto mb-2 opacity-60" />
+            <p className="text-sm font-medium">Error al cargar usuarios</p>
+            <p className="text-xs mt-1 text-red-300">{errorUsers}</p>
+            <button onClick={cargarUsuarios} className="mt-3 text-xs text-red-500 hover:underline">Reintentar</button>
+          </div>
+        ) : usuarios.length === 0 ? (
           <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
             <Users size={32} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">No hay usuarios registrados</p>
@@ -825,23 +876,18 @@ function TabUsuarios({ data }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  {['Usuario', 'Nombre', 'Rol'].map(col => (
+                  {['Nombre', 'Rol'].map(col => (
                     <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {usuariosExistentes.map((u, i) => (
-                  <tr key={u.id ?? u.username ?? i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
-                    <td className="px-4 py-3 font-mono text-slate-800 text-sm">{u.username ?? u.nombre ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{u.nombre ?? u.display_name ?? '—'}</td>
+                {usuarios.map((u, i) => (
+                  <tr key={u.id ?? i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                    <td className="px-4 py-3 text-slate-800 font-medium">{u.nombre ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full
-                        ${u.rol === 'ADMINISTRADOR' ? 'bg-violet-100 text-violet-700'  :
-                          u.rol === 'PLANILLERO'    ? 'bg-blue-100 text-blue-700'      :
-                          u.rol === 'SANEAMIENTO'   ? 'bg-emerald-100 text-emerald-700':
-                          'bg-slate-100 text-slate-600'}`}>
-                        {u.rol ?? '—'}
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${ROL_BADGE[u.role] ?? 'bg-slate-100 text-slate-600'}`}>
+                        {u.role ?? '—'}
                       </span>
                     </td>
                   </tr>
@@ -948,7 +994,7 @@ export default function TrabundaPage() {
         {/* ── Contenido del tab activo ───────────────────────────── */}
         {tab === 'resumen'  && <TabResumen data={data} loading={loading} />}
         {tab === 'reportes' && <TabReportes />}
-        {tab === 'usuarios' && isSuperadmin && <TabUsuarios data={data} />}
+        {tab === 'usuarios' && isSuperadmin && <TabUsuarios />}
 
       </div>
     </Layout>
