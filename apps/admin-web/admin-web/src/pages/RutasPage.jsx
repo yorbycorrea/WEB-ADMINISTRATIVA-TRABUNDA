@@ -1,7 +1,55 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, Truck, Users, ScanLine, CheckCircle, XCircle, AlertCircle, Database } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  RefreshCw, Truck, Users, ScanLine, CheckCircle, XCircle, AlertCircle,
+  Database, Search, X, ChevronLeft, ChevronRight,
+  FileText, FileSpreadsheet, Eye, Settings, LayoutDashboard, BarChart2, Shield,
+} from 'lucide-react';
 import Layout from '../components/Layout';
-import { apiGetRutasDashboard } from '../api/gateway';
+import { useAuth } from '../context/AuthContext';
+import {
+  apiGetRutasDashboard,
+  apiGetRutasReportes,
+  apiGetRutasJornadaResumen,
+  apiGetRutasJornadaDetalle,
+} from '../api/gateway';
+import {
+  exportRutasJornadasPDF,
+  exportRutasJornadasExcel,
+  exportRutasJornadaDetallePDF,
+  exportRutasJornadaDetalleExcel,
+} from '../utils/exportUtils';
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
+
+const ESTADO_LABELS = {
+  ABIERTA:    'Abierta',
+  EN_PROCESO: 'En Proceso',
+  FINALIZADA: 'Finalizada',
+};
+
+const ESTADO_BADGE = {
+  ABIERTA:    'bg-amber-100 text-amber-700 border border-amber-200',
+  EN_PROCESO: 'bg-blue-100 text-blue-700 border border-blue-200',
+  FINALIZADA: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+};
+
+const LIMIT = 100;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtFechaCorta(val) {
+  if (!val) return '—';
+  try { const [y, m, d] = String(val).split('-'); return `${d}/${m}/${y}`; }
+  catch { return String(val); }
+}
+
+function fmtHoraISO(val) {
+  if (!val) return '—';
+  try { return new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
+  catch { return '—'; }
+}
+
+// ─── UI compartida ────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, sub, color = 'blue' }) {
   const colors = {
@@ -46,7 +94,6 @@ RUTAS_ADMIN_PASS=tu_password`}
   );
 }
 
-// Card de empresa de transporte con sus transportistas
 function EmpresaCard({ empresa }) {
   const activa         = !!empresa.activo;
   const transportistas = empresa.transportistas ?? [];
@@ -66,8 +113,6 @@ function EmpresaCard({ empresa }) {
           {activa ? 'Activa' : 'Inactiva'}
         </span>
       </div>
-
-      {/* Lista de transportistas */}
       <div className="border-t border-slate-100 pt-4">
         <div className="flex items-center gap-2 mb-3">
           <Users size={13} className="text-slate-400" />
@@ -97,11 +142,660 @@ function EmpresaCard({ empresa }) {
   );
 }
 
+function EstadoBadge({ estado }) {
+  const cls   = ESTADO_BADGE[estado] ?? 'bg-slate-100 text-slate-600 border border-slate-200';
+  const label = ESTADO_LABELS[estado] ?? estado ?? '—';
+  return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>;
+}
+
+// ─── Modal detalle de jornada ─────────────────────────────────────────────────
+
+function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onExcel }) {
+  const trabajadores = detalle?.items ?? [];
+  const stats        = resumen?.resumen ?? null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        {/* Header del modal */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-100 flex-shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">
+              Jornada #{jornada.id_jornada} — Control de Movilidad
+            </h2>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-slate-500">{fmtFechaCorta(jornada.fecha)}</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-sm text-slate-500 font-mono">{jornada.placa ?? '—'}</span>
+              <span className="text-slate-300">·</span>
+              <EstadoBadge estado={jornada.estado_actual} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onPDF}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-50"
+            >
+              <FileText size={14} /> PDF
+            </button>
+            <button
+              onClick={onExcel}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-50"
+            >
+              <FileSpreadsheet size={14} /> Excel
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Cuerpo */}
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center p-12">
+            <div className="text-center">
+              <RefreshCw size={32} className="animate-spin text-blue-500 mx-auto mb-3" />
+              <p className="text-slate-500 text-sm">Cargando detalle...</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {/* Info + stats */}
+            <div className="p-6 border-b border-slate-100 space-y-4">
+              {/* Datos de la jornada */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'ID Turno',  value: jornada.id_turno ?? '—' },
+                  { label: 'ID Ruta',   value: jornada.id_ruta  ?? '—' },
+                  { label: 'Empresa',   value: `#${jornada.id_empresa_transporte ?? '—'}` },
+                  { label: 'Sesiones',  value: stats?.sesiones_involucradas ?? '—' },
+                ].map(item => (
+                  <div key={item.label} className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-xs text-slate-400 mb-0.5">{item.label}</p>
+                    <p className="font-bold text-slate-800">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Estadísticas */}
+              {stats && (
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-emerald-700">{stats.total_marcados}</p>
+                    <p className="text-xs text-emerald-600 mt-1 font-semibold uppercase tracking-wide">Marcados</p>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                    <p className="text-3xl font-bold text-blue-700">{stats.total_asignados}</p>
+                    <p className="text-xs text-blue-600 mt-1 font-semibold uppercase tracking-wide">Asignados</p>
+                  </div>
+                  <div className={`border rounded-xl p-4 text-center ${stats.faltantes > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                    <p className={`text-3xl font-bold ${stats.faltantes > 0 ? 'text-red-700' : 'text-slate-400'}`}>{stats.faltantes}</p>
+                    <p className={`text-xs mt-1 font-semibold uppercase tracking-wide ${stats.faltantes > 0 ? 'text-red-600' : 'text-slate-400'}`}>Faltantes</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Tabla de trabajadores */}
+            <div className="p-6">
+              <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-4">
+                Trabajadores marcados ({trabajadores.length})
+              </h3>
+              {trabajadores.length === 0 ? (
+                <div className="text-center py-10 text-slate-400">
+                  <Users size={32} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Sin registros de marcación en esta jornada</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        {['N°', 'DNI', 'Apellidos y Nombres', 'Cargo', 'Hora', 'Origen'].map(col => (
+                          <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trabajadores.map((t, i) => (
+                        <tr key={t.id_trabajador} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                          <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i + 1}</td>
+                          <td className="px-4 py-3 font-mono text-slate-700">{t.dni ?? '—'}</td>
+                          <td className="px-4 py-3 font-medium text-slate-800">
+                            {`${(t.apellidos ?? '').toUpperCase()} ${t.nombres ?? ''}`.trim() || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{t.cargo ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-slate-700">{fmtHoraISO(t.fecha_hora)}</td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{t.origen ?? '—'}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Reportes ────────────────────────────────────────────────────────────
+
+function TabReportesRutas() {
+  const today = new Date().toISOString().split('T')[0];
+
+  const [filters, setFilters] = useState({ fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' });
+  const [applied, setApplied] = useState({ fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' });
+  const [jornadas, setJornadas] = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
+  const [offset,   setOffset]   = useState(0);
+  const [hasMore,  setHasMore]  = useState(false);
+
+  // Modal
+  const [modal, setModal] = useState(null);
+
+  const fetchReportes = useCallback(async (f, off) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiGetRutasReportes({
+        fecha:    f.fecha    || undefined,
+        id_turno: f.id_turno || undefined,
+        id_ruta:  f.id_ruta  || undefined,
+        placa:    f.placa    || undefined,
+        estado:   f.estado   || undefined,
+        limit:    LIMIT,
+        offset:   off,
+      });
+      if (res?.ok === false || res?.error) {
+        setError(res.error ?? res.message ?? 'Error al cargar reportes');
+        setJornadas([]);
+        setHasMore(false);
+      } else {
+        const items = res.items ?? [];
+        setJornadas(items);
+        setHasMore(items.length === LIMIT);
+      }
+    } catch (e) {
+      setError(e.message);
+      setJornadas([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReportes(applied, offset);
+  }, [applied, offset, fetchReportes]);
+
+  function handleBuscar() {
+    setOffset(0);
+    setApplied({ ...filters });
+  }
+
+  function handleLimpiar() {
+    const clean = { fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' };
+    setFilters(clean);
+    setApplied(clean);
+    setOffset(0);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') handleBuscar();
+  }
+
+  async function openModal(jornada) {
+    setModal({ jornada, resumen: null, detalle: null, loading: true });
+    try {
+      const [r, d] = await Promise.all([
+        apiGetRutasJornadaResumen(jornada.id_jornada),
+        apiGetRutasJornadaDetalle(jornada.id_jornada),
+      ]);
+      setModal({ jornada, resumen: r, detalle: d, loading: false });
+    } catch (e) {
+      setModal(prev => ({ ...prev, loading: false }));
+    }
+  }
+
+  async function quickExportPDF(jornada) {
+    const [r, d] = await Promise.all([
+      apiGetRutasJornadaResumen(jornada.id_jornada),
+      apiGetRutasJornadaDetalle(jornada.id_jornada),
+    ]);
+    exportRutasJornadaDetallePDF(jornada, r?.resumen ?? null, d?.items ?? []);
+  }
+
+  async function quickExportExcel(jornada) {
+    const [r, d] = await Promise.all([
+      apiGetRutasJornadaResumen(jornada.id_jornada),
+      apiGetRutasJornadaDetalle(jornada.id_jornada),
+    ]);
+    exportRutasJornadaDetalleExcel(jornada, r?.resumen ?? null, d?.items ?? []);
+  }
+
+  const hasPrev    = offset > 0;
+  const currentPage = Math.floor(offset / LIMIT) + 1;
+
+  return (
+    <div className="space-y-6">
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-4">Filtros de búsqueda</h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Fecha <span className="text-red-400">*</span></label>
+            <input
+              type="date"
+              value={filters.fecha}
+              onChange={e => setFilters(p => ({ ...p, fecha: e.target.value }))}
+              onKeyDown={handleKeyDown}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Estado</label>
+            <select
+              value={filters.estado}
+              onChange={e => setFilters(p => ({ ...p, estado: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todos</option>
+              <option value="ABIERTA">Abierta</option>
+              <option value="EN_PROCESO">En Proceso</option>
+              <option value="FINALIZADA">Finalizada</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Placa</label>
+            <input
+              type="text"
+              value={filters.placa}
+              onChange={e => setFilters(p => ({ ...p, placa: e.target.value.toUpperCase() }))}
+              onKeyDown={handleKeyDown}
+              placeholder="Ej: P16-752"
+              maxLength={10}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono uppercase placeholder:font-sans placeholder:normal-case"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">ID Turno</label>
+            <input
+              type="number"
+              value={filters.id_turno}
+              onChange={e => setFilters(p => ({ ...p, id_turno: e.target.value }))}
+              onKeyDown={handleKeyDown}
+              placeholder="Ej: 1"
+              min={1}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">ID Ruta</label>
+            <input
+              type="number"
+              value={filters.id_ruta}
+              onChange={e => setFilters(p => ({ ...p, id_ruta: e.target.value }))}
+              onKeyDown={handleKeyDown}
+              placeholder="Ej: 2"
+              min={1}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBuscar}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 shadow-sm shadow-blue-200"
+            >
+              <Search size={14} />
+              Buscar
+            </button>
+            <button
+              onClick={handleLimpiar}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+            >
+              <X size={14} />
+              Limpiar
+            </button>
+          </div>
+
+          {/* Exportar lista completa */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 mr-1">Exportar lista:</span>
+            <button
+              onClick={() => exportRutasJornadasPDF(jornadas, applied.fecha)}
+              disabled={loading || jornadas.length === 0}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-40"
+            >
+              <FileText size={14} /> PDF
+            </button>
+            <button
+              onClick={() => exportRutasJornadasExcel(jornadas, applied.fecha)}
+              disabled={loading || jornadas.length === 0}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-40"
+            >
+              <FileSpreadsheet size={14} /> Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+          <XCircle size={18} className="text-red-500 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-red-700 text-sm">Error al cargar reportes</p>
+            <p className="text-xs text-red-500 mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Tabla de jornadas */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <p className="text-sm text-slate-500">
+            {loading
+              ? 'Cargando jornadas...'
+              : `${jornadas.length} jornada${jornadas.length !== 1 ? 's' : ''} encontrada${jornadas.length !== 1 ? 's' : ''}`
+            }
+          </p>
+          {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                {['ID', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones', 'Acciones'].map(col => (
+                  <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && jornadas.length === 0 ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    {Array.from({ length: 9 }).map((_, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: `${60 + (j * 7) % 30}%` }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : jornadas.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-14 text-center text-slate-400">
+                    <BarChart2 size={36} className="mx-auto mb-3 opacity-25" />
+                    <p className="text-sm font-medium">No se encontraron jornadas</p>
+                    <p className="text-xs mt-1 text-slate-300">Ajusta los filtros y vuelve a buscar</p>
+                  </td>
+                </tr>
+              ) : (
+                jornadas.map(j => (
+                  <tr key={j.id_jornada} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-500">#{j.id_jornada}</td>
+                    <td className="px-4 py-3 text-slate-700">{fmtFechaCorta(j.fecha)}</td>
+                    <td className="px-4 py-3 text-center text-slate-700">{j.id_turno ?? '—'}</td>
+                    <td className="px-4 py-3 text-center text-slate-700">{j.id_ruta ?? '—'}</td>
+                    <td className="px-4 py-3 font-mono font-semibold text-slate-800">{j.placa ?? '—'}</td>
+                    <td className="px-4 py-3"><EstadoBadge estado={j.estado_actual} /></td>
+                    <td className="px-4 py-3 text-center font-bold text-slate-800">{j.total_marcados ?? 0}</td>
+                    <td className="px-4 py-3 text-center text-slate-500">{j.sesiones_involucradas ?? 0}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => openModal(j)}
+                          title="Ver detalle"
+                          className="p-2 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <button
+                          onClick={() => quickExportPDF(j)}
+                          title="Descargar PDF"
+                          className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        >
+                          <FileText size={14} />
+                        </button>
+                        <button
+                          onClick={() => quickExportExcel(j)}
+                          title="Descargar Excel"
+                          className="p-2 rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                        >
+                          <FileSpreadsheet size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Paginación */}
+        {(hasPrev || hasMore) && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
+            <p className="text-xs text-slate-400">
+              Página {currentPage} · Mostrando {offset + 1}–{offset + jornadas.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setOffset(o => Math.max(0, o - LIMIT))}
+                disabled={!hasPrev || loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all"
+              >
+                <ChevronLeft size={14} /> Anterior
+              </button>
+              <button
+                onClick={() => setOffset(o => o + LIMIT)}
+                disabled={!hasMore || loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all"
+              >
+                Siguiente <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {modal && (
+        <JornadaModal
+          jornada={modal.jornada}
+          resumen={modal.resumen}
+          detalle={modal.detalle}
+          loading={modal.loading}
+          onClose={() => setModal(null)}
+          onPDF={() => exportRutasJornadaDetallePDF(modal.jornada, modal.resumen?.resumen ?? null, modal.detalle?.items ?? [])}
+          onExcel={() => exportRutasJornadaDetalleExcel(modal.jornada, modal.resumen?.resumen ?? null, modal.detalle?.items ?? [])}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: Dashboard ───────────────────────────────────────────────────────────
+
+function TabDashboard({ data }) {
+  const apiOnline      = data?.health?.status === 'ok' || data?.health?.status === 'online';
+  const empresas       = data?.empresas ?? [];
+  const totalEmpresas  = data?.totalEmpresas ?? 0;
+  const activas        = data?.totalEmpresasActivas ?? 0;
+  const totalTransport = empresas.reduce((acc, e) => acc + (e.transportistas?.length ?? 0), 0);
+
+  return (
+    <div className="space-y-8">
+      {/* Estado */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">Estado del sistema</h2>
+        <div className="flex flex-wrap gap-3">
+          <StatusBadge ok={apiOnline}         label="API Backend" />
+          <StatusBadge ok={totalEmpresas > 0} label="Base de datos" />
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatCard label="Empresas activas" value={activas}        color="blue"    sub={`de ${totalEmpresas} totales`} />
+        <StatCard label="Transportistas"   value={totalTransport} color="emerald" sub="en todas las empresas" />
+        <StatCard label="Jornadas activas" value="—"              color="violet"  sub="ver pestaña Reportes" />
+        <StatCard label="Scans hoy"        value="—"              color="amber"   sub="ver pestaña Reportes" />
+      </div>
+
+      {/* Flujo */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">Flujo de una jornada</h2>
+        <div className="flex items-start gap-0 overflow-x-auto pb-2">
+          {[
+            { title: 'Inicio de sesión',   desc: 'Scanner selecciona ruta, turno, empresa y transportista',  icon: <ScanLine size={18} />,    color: 'blue' },
+            { title: 'Escaneo de workers', desc: 'App lee QR/DNI de cada trabajador que aborda el vehículo', icon: <Users size={18} />,       color: 'emerald' },
+            { title: 'Validación',         desc: 'Backend verifica ruta activa y detecta duplicados',        icon: <CheckCircle size={18} />, color: 'violet' },
+            { title: 'Cierre de jornada',  desc: 'Scanner confirma jornada; queda disponible para reportes', icon: <Truck size={18} />,       color: 'amber' },
+          ].map((step, i, arr) => (
+            <div key={step.title} className="flex items-start gap-0 flex-shrink-0">
+              <div className="flex flex-col items-center w-44">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-3
+                  ${step.color === 'blue'    ? 'bg-blue-100 text-blue-600'       : ''}
+                  ${step.color === 'emerald' ? 'bg-emerald-100 text-emerald-600' : ''}
+                  ${step.color === 'violet'  ? 'bg-violet-100 text-violet-600'   : ''}
+                  ${step.color === 'amber'   ? 'bg-amber-100 text-amber-600'     : ''}
+                `}>
+                  {step.icon}
+                </div>
+                <p className="text-xs font-bold text-slate-700 text-center mb-1">{step.title}</p>
+                <p className="text-[11px] text-slate-400 text-center leading-relaxed">{step.desc}</p>
+              </div>
+              {i < arr.length - 1 && (
+                <div className="flex items-center mt-4 mx-1 flex-shrink-0">
+                  <div className="w-8 h-0.5 bg-slate-200" />
+                  <div className="w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-slate-300" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Empresas */}
+      <div>
+        <h2 className="font-bold text-slate-700 mb-4 text-xs uppercase tracking-wider">
+          Empresas de transporte ({totalEmpresas})
+        </h2>
+        {empresas.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400">
+            <Truck size={36} className="mx-auto mb-3 opacity-30" />
+            <p>No se encontraron empresas de transporte</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {empresas.map(emp => (
+              <EmpresaCard key={emp.id_empresa_transporte} empresa={emp} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stack técnico */}
+      <div className="bg-slate-900 rounded-2xl p-6 text-slate-400 text-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <Database size={16} className="text-slate-500" />
+          <span className="font-bold text-white text-xs uppercase tracking-wider">Stack técnico</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          <div><span className="text-slate-500">Mobile</span><p className="text-white font-medium mt-0.5">Flutter (Android/iOS)</p></div>
+          <div><span className="text-slate-500">Backend</span><p className="text-white font-medium mt-0.5">Node.js + Express</p></div>
+          <div><span className="text-slate-500">Base de datos</span><p className="text-white font-medium mt-0.5">MySQL (Docker)</p></div>
+          <div><span className="text-slate-500">Roles</span><p className="text-white font-medium mt-0.5">ADMIN / SCANNER</p></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Administración (solo superadmin) ────────────────────────────────────
+
+function TabAdminRutas() {
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl border border-slate-200 p-10 shadow-sm text-center">
+        <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Settings size={28} className="text-violet-500" />
+        </div>
+        <h3 className="font-bold text-slate-800 text-lg mb-2">Administración de Rutas</h3>
+        <p className="text-slate-500 text-sm mb-8 max-w-md mx-auto">
+          Gestión avanzada del sistema de rutas. Solo visible para superadmin.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto">
+          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 text-left cursor-not-allowed select-none">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
+                <Truck size={16} className="text-slate-400" />
+              </div>
+              <span className="font-semibold text-slate-500 text-sm">Activar / Desactivar Rutas</span>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">Habilita o deshabilita rutas del sistema de transporte</p>
+            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-slate-200 text-slate-500 rounded-full font-medium">
+              Próximamente
+            </span>
+          </div>
+          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 text-left cursor-not-allowed select-none">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
+                <Database size={16} className="text-slate-400" />
+              </div>
+              <span className="font-semibold text-slate-500 text-sm">Asignar Área a Ruta</span>
+            </div>
+            <p className="text-xs text-slate-400 mb-3">Vincula áreas de trabajo con rutas de transporte específicas</p>
+            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-slate-200 text-slate-500 rounded-full font-medium">
+              Próximamente
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+
 export default function RutasPage() {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(null);
+  const { user }     = useAuth();
+  const isSuperadmin = user?.role === 'superadmin';
+
+  const [activeTab,   setActiveTab]   = useState('dashboard');
+  const [data,        setData]        = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [lastUpdate,  setLastUpdate]  = useState(null);
 
   async function fetchData() {
     setLoading(true);
@@ -123,21 +817,41 @@ export default function RutasPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const apiOnline       = data?.health?.status === 'ok' || data?.health?.status === 'online';
-  const empresas        = data?.empresas ?? [];
-  const totalEmpresas   = data?.totalEmpresas ?? 0;
-  const activas         = data?.totalEmpresasActivas ?? 0;
-  const totalTransport  = empresas.reduce((acc, e) => acc + (e.transportistas?.length ?? 0), 0);
+  const tabs = [
+    { id: 'dashboard', label: 'Dashboard',       icon: <LayoutDashboard size={15} /> },
+    { id: 'reportes',  label: 'Reportes',         icon: <BarChart2 size={15} /> },
+    ...(isSuperadmin ? [{ id: 'admin', label: 'Administración', icon: <Shield size={15} /> }] : []),
+  ];
 
   return (
     <Layout
       title="Rutas Trabunda"
       subtitle={lastUpdate ? `Actualizado: ${lastUpdate}` : 'App móvil de control de acceso y transporte'}
     >
-      <div className="space-y-8 max-w-[1200px]">
+      <div className="space-y-6 max-w-[1200px]">
 
-        {/* Refresh */}
-        <div className="flex justify-end">
+        {/* Barra superior: tabs + refresh */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                  ${activeTab === tab.id
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                {tab.icon}
+                {tab.label}
+                {tab.id === 'admin' && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded-full font-bold leading-none">SA</span>
+                )}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={fetchData}
             disabled={loading}
@@ -148,8 +862,10 @@ export default function RutasPage() {
           </button>
         </div>
 
+        {/* Backend no configurado */}
         {data && !data.configured && <NotConfigured />}
 
+        {/* Error de conexión */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-center gap-3">
             <XCircle size={20} className="text-red-500 flex-shrink-0" />
@@ -160,6 +876,7 @@ export default function RutasPage() {
           </div>
         )}
 
+        {/* Skeleton inicial */}
         {loading && !data && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -168,91 +885,15 @@ export default function RutasPage() {
           </div>
         )}
 
+        {/* Contenido por tab */}
+        {/* Reportes siempre accesible (gestiona su propio error si el backend falla) */}
+        {activeTab === 'reportes' && <TabReportesRutas />}
+
+        {/* Dashboard y Admin solo cuando el backend está configurado */}
         {data?.configured && (
           <>
-            {/* Estado */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="font-bold text-slate-700 mb-4 text-sm uppercase tracking-wider">Estado del sistema</h2>
-              <div className="flex flex-wrap gap-3">
-                <StatusBadge ok={apiOnline}       label="API Backend" />
-                <StatusBadge ok={totalEmpresas > 0} label="Base de datos" />
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-              <StatCard label="Empresas activas"  value={activas}         color="blue"    sub={`de ${totalEmpresas} totales`} />
-              <StatCard label="Transportistas"     value={totalTransport}  color="emerald" sub="en todas las empresas" />
-              <StatCard label="Jornadas activas"   value="—"              color="violet"  sub="requiere configuración" />
-              <StatCard label="Scans hoy"          value="—"              color="amber"   sub="requiere configuración" />
-            </div>
-
-            {/* Cómo funciona el flujo de escaneo */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h2 className="font-bold text-slate-700 mb-4 text-sm uppercase tracking-wider">Flujo de una jornada</h2>
-              <div className="flex items-start gap-0 overflow-x-auto pb-2">
-                {[
-                  { num: '1', title: 'Inicio de sesión',    desc: 'Scanner selecciona ruta, turno, empresa y transportista',  icon: <ScanLine size={18}/>,  color: 'blue' },
-                  { num: '2', title: 'Escaneo de workers', desc: 'App lee QR/DNI de cada trabajador que aborda el vehículo', icon: <Users size={18}/>,    color: 'emerald' },
-                  { num: '3', title: 'Validación',          desc: 'Backend verifica ruta activa y detecta trabajadores duplicados', icon: <CheckCircle size={18}/>, color: 'violet' },
-                  { num: '4', title: 'Cierre de jornada',  desc: 'Scanner confirma jornada; queda disponible para reportes', icon: <Truck size={18}/>,    color: 'amber' },
-                ].map((step, i, arr) => (
-                  <div key={step.num} className="flex items-start gap-0 flex-shrink-0">
-                    <div className="flex flex-col items-center w-44">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-3
-                        ${step.color === 'blue'    ? 'bg-blue-100 text-blue-600'    : ''}
-                        ${step.color === 'emerald' ? 'bg-emerald-100 text-emerald-600' : ''}
-                        ${step.color === 'violet'  ? 'bg-violet-100 text-violet-600'  : ''}
-                        ${step.color === 'amber'   ? 'bg-amber-100 text-amber-600'   : ''}
-                      `}>
-                        {step.icon}
-                      </div>
-                      <p className="text-xs font-bold text-slate-700 text-center mb-1">{step.title}</p>
-                      <p className="text-[11px] text-slate-400 text-center leading-relaxed">{step.desc}</p>
-                    </div>
-                    {i < arr.length - 1 && (
-                      <div className="flex items-center mt-4 mx-1 flex-shrink-0">
-                        <div className="w-8 h-0.5 bg-slate-200" />
-                        <div className="w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-slate-300" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Empresas de transporte */}
-            <div>
-              <h2 className="font-bold text-slate-700 mb-4 text-sm uppercase tracking-wider">
-                Empresas de transporte ({totalEmpresas})
-              </h2>
-              {empresas.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400">
-                  <Truck size={36} className="mx-auto mb-3 opacity-30" />
-                  <p>No se encontraron empresas de transporte</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {empresas.map(emp => (
-                    <EmpresaCard key={emp.id_empresa_transporte} empresa={emp} />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Info técnica */}
-            <div className="bg-slate-900 rounded-2xl p-6 text-slate-400 text-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <Database size={16} className="text-slate-500" />
-                <span className="font-bold text-white text-xs uppercase tracking-wider">Stack técnico</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                <div><span className="text-slate-500">Mobile</span><p className="text-white font-medium mt-0.5">Flutter (Android/iOS)</p></div>
-                <div><span className="text-slate-500">Backend</span><p className="text-white font-medium mt-0.5">Node.js + Express</p></div>
-                <div><span className="text-slate-500">Base de datos</span><p className="text-white font-medium mt-0.5">MySQL (Docker)</p></div>
-                <div><span className="text-slate-500">Roles</span><p className="text-white font-medium mt-0.5">ADMIN / SCANNER</p></div>
-              </div>
-            </div>
+            {activeTab === 'dashboard' && <TabDashboard data={data} />}
+            {activeTab === 'admin' && isSuperadmin && <TabAdminRutas />}
           </>
         )}
       </div>

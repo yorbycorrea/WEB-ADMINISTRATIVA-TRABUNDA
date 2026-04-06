@@ -402,6 +402,257 @@ export function exportToPDF(reportes, fecha, tipo) {
   doc.save(`trabunda-reportes-${fecha}${tipo ? `-${tipo.toLowerCase()}` : ''}.pdf`);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  RUTAS — Exportación de jornadas y control de movilidad
+// ═════════════════════════════════════════════════════════════════════════════
+
+const ESTADO_RUTAS_LABELS = {
+  ABIERTA:    'Abierta',
+  EN_PROCESO: 'En Proceso',
+  FINALIZADA: 'Finalizada',
+};
+
+function fmtFechaRutas(val) {
+  if (!val) return '—';
+  try {
+    const [y, m, d] = String(val).split('-');
+    return `${d}/${m}/${y}`;
+  } catch { return String(val); }
+}
+
+function fmtHoraISO(val) {
+  if (!val) return '—';
+  try { return new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
+  catch { return '—'; }
+}
+
+// ─── PDF: lista de jornadas ───────────────────────────────────────────────────
+export function exportRutasJornadasPDF(jornadas, fecha) {
+  if (!jornadas.length) return;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, 297, 22, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Rutas Trabunda — Control de Movilidad', 14, 14);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Fecha: ${fecha}  ·  Total jornadas: ${jornadas.length}`, 14, 20);
+  doc.text(
+    `Generado: ${new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}`,
+    283, 20, { align: 'right' }
+  );
+
+  autoTable(doc, {
+    head: [['ID', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones']],
+    body: jornadas.map(j => [
+      j.id_jornada,
+      j.fecha ?? '—',
+      j.id_turno ?? '—',
+      j.id_ruta  ?? '—',
+      j.placa    ?? '—',
+      ESTADO_RUTAS_LABELS[j.estado_actual] ?? j.estado_actual ?? '—',
+      j.total_marcados        ?? 0,
+      j.sesiones_involucradas ?? 0,
+    ]),
+    startY: 26,
+    margin: { left: 14, right: 14 },
+    styles:     { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 16, halign: 'center' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 22, halign: 'center' },
+      3: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 30, halign: 'center', font: 'courier' },
+      5: { cellWidth: 30 },
+      6: { cellWidth: 24, halign: 'center' },
+      7: { cellWidth: 24, halign: 'center' },
+    },
+  });
+
+  const totalPags = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPags; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Página ${i} de ${totalPags}`, 148.5, 205, { align: 'center' });
+  }
+  doc.save(`rutas-jornadas-${fecha}.pdf`);
+}
+
+// ─── Excel: lista de jornadas ─────────────────────────────────────────────────
+export function exportRutasJornadasExcel(jornadas, fecha) {
+  if (!jornadas.length) return;
+
+  const cabecera = ['ID Jornada', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Estado Real', 'Marcados', 'Sesiones', 'Creado En'];
+  const filas = jornadas.map(j => [
+    j.id_jornada,
+    j.fecha ?? '—',
+    j.id_turno ?? '—',
+    j.id_ruta  ?? '—',
+    j.placa    ?? '—',
+    ESTADO_RUTAS_LABELS[j.estado_actual] ?? j.estado_actual ?? '—',
+    j.estado_real ?? '—',
+    j.total_marcados        ?? 0,
+    j.sesiones_involucradas ?? 0,
+    j.creado_en ? new Date(j.creado_en).toLocaleString('es-ES') : '—',
+  ]);
+
+  const hoja = XLSX.utils.aoa_to_sheet([cabecera, ...filas]);
+  hoja['!cols'] = [12, 14, 12, 10, 16, 14, 14, 12, 12, 22].map(wch => ({ wch }));
+
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Jornadas');
+  XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+    ['Proyecto',        'Rutas Trabunda'],
+    ['Fecha filtro',    fecha],
+    ['Total jornadas',  jornadas.length],
+    ['Generado',        new Date().toLocaleString('es-ES')],
+  ]), 'Info');
+
+  XLSX.writeFile(libro, `rutas-jornadas-${fecha}.xlsx`);
+}
+
+// ─── PDF: detalle de una jornada (Control de Movilidad) ──────────────────────
+export function exportRutasJornadaDetallePDF(jornada, resumenData, trabajadores) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const hoyStr = fmtFecha(new Date().toISOString());
+
+  // Encabezado institucional
+  autoTable(doc, {
+    body: [[
+      { content: 'RUTAS TRABUNDA', styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 10 } },
+      { content: 'FORMATO\nCONTROL DE MOVILIDAD', styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 8 } },
+      { content: `Código: COD-RM-01\nVersión: 01\nFecha: ${hoyStr}`, styles: { halign: 'left', valign: 'middle', fontSize: 7 } },
+    ]],
+    startY: 12,
+    margin: { left: 14, right: 14 },
+    styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 3 },
+    columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 50 } },
+    theme: 'grid',
+  });
+
+  // Info de la jornada
+  const estadoLabel = ESTADO_RUTAS_LABELS[jornada?.estado_actual] ?? jornada?.estado_actual ?? '—';
+  autoTable(doc, {
+    body: [
+      [
+        { content: `Fecha: ${fmtFechaRutas(jornada?.fecha)}`, styles: { fontSize: 8 } },
+        { content: `ID Turno: ${jornada?.id_turno ?? '—'}`, styles: { fontSize: 8 } },
+        { content: `ID Ruta: ${jornada?.id_ruta ?? '—'}`, styles: { fontSize: 8 } },
+      ],
+      [
+        { content: `Placa: ${jornada?.placa ?? '—'}`, styles: { fontSize: 8, fontStyle: 'bold' } },
+        { content: `Estado: ${estadoLabel}`, styles: { fontSize: 8 } },
+        { content: `Jornada ID: #${jornada?.id_jornada ?? '—'}`, styles: { fontSize: 8 } },
+      ],
+    ],
+    startY: doc.lastAutoTable.finalY,
+    margin: { left: 14, right: 14 },
+    styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 2 },
+    theme: 'grid',
+  });
+
+  // Stats de resumen
+  if (resumenData) {
+    autoTable(doc, {
+      body: [[
+        { content: `Marcados\n${resumenData.total_marcados ?? 0}`,       styles: { fontStyle: 'bold', fontSize: 10, halign: 'center', fillColor: [236, 253, 245] } },
+        { content: `Asignados\n${resumenData.total_asignados ?? 0}`,     styles: { fontStyle: 'bold', fontSize: 10, halign: 'center', fillColor: [239, 246, 255] } },
+        { content: `Faltantes\n${resumenData.faltantes ?? 0}`,           styles: { fontStyle: 'bold', fontSize: 10, halign: 'center', fillColor: [255, 241, 242] } },
+        { content: `Sesiones\n${resumenData.sesiones_involucradas ?? 0}`, styles: { fontStyle: 'bold', fontSize: 10, halign: 'center', fillColor: [250, 245, 255] } },
+      ]],
+      startY: doc.lastAutoTable.finalY,
+      margin: { left: 14, right: 14 },
+      styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 4 },
+      theme: 'grid',
+    });
+  }
+
+  // Tabla de trabajadores
+  autoTable(doc, {
+    head: [['N°', 'DNI', 'Apellidos y Nombres', 'Cargo', 'Hora', 'Origen']],
+    body: (trabajadores ?? []).map((t, i) => [
+      i + 1,
+      t.dni ?? '—',
+      `${(t.apellidos ?? '').toUpperCase()} ${t.nombres ?? ''}`.trim() || '—',
+      t.cargo ?? '—',
+      fmtHoraISO(t.fecha_hora),
+      t.origen ?? '—',
+    ]),
+    startY: doc.lastAutoTable.finalY + 4,
+    margin: { left: 14, right: 14 },
+    styles:     { fontSize: 8, cellPadding: 2, lineColor: [100, 116, 139], lineWidth: 0.2 },
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', halign: 'center' },
+    columnStyles: {
+      0: { cellWidth: 8,  halign: 'center' },
+      1: { cellWidth: 24, halign: 'center' },
+      2: { cellWidth: 72 },
+      3: { cellWidth: 30 },
+      4: { cellWidth: 16, halign: 'center' },
+      5: { cellWidth: 28 },
+    },
+    theme: 'grid',
+  });
+
+  // Pie
+  let y = (doc.lastAutoTable?.finalY ?? 250) + 10;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Total trabajadores marcados: ${trabajadores?.length ?? 0}  ·  Generado: ${new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}`, 14, y);
+
+  doc.save(`rutas-jornada-${jornada?.id_jornada ?? 'x'}-${jornada?.fecha ?? 'sin-fecha'}.pdf`);
+}
+
+// ─── Excel: detalle de una jornada ───────────────────────────────────────────
+export function exportRutasJornadaDetalleExcel(jornada, resumenData, trabajadores) {
+  const libro = XLSX.utils.book_new();
+
+  // Hoja resumen
+  const hojaResumen = XLSX.utils.aoa_to_sheet([
+    ['Campo',        'Valor'],
+    ['ID Jornada',   jornada?.id_jornada ?? '—'],
+    ['Fecha',        fmtFechaRutas(jornada?.fecha)],
+    ['ID Turno',     jornada?.id_turno ?? '—'],
+    ['ID Ruta',      jornada?.id_ruta  ?? '—'],
+    ['Placa',        jornada?.placa    ?? '—'],
+    ['Estado',       ESTADO_RUTAS_LABELS[jornada?.estado_actual] ?? jornada?.estado_actual ?? '—'],
+    ['', ''],
+    ['Marcados',     resumenData?.total_marcados        ?? 0],
+    ['Asignados',    resumenData?.total_asignados       ?? 0],
+    ['Faltantes',    resumenData?.faltantes             ?? 0],
+    ['Sesiones',     resumenData?.sesiones_involucradas ?? 0],
+    ['', ''],
+    ['Generado',     new Date().toLocaleString('es-ES')],
+  ]);
+  hojaResumen['!cols'] = [{ wch: 18 }, { wch: 30 }];
+  XLSX.utils.book_append_sheet(libro, hojaResumen, 'Resumen');
+
+  // Hoja trabajadores
+  const cab  = ['N°', 'DNI', 'Nombres', 'Apellidos', 'Cargo', 'Hora de Abordaje', 'Dispositivo', 'Origen'];
+  const filas = (trabajadores ?? []).map((t, i) => [
+    i + 1,
+    t.dni          ?? '—',
+    t.nombres      ?? '—',
+    t.apellidos    ?? '—',
+    t.cargo        ?? '—',
+    t.fecha_hora ? new Date(t.fecha_hora).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—',
+    t.dispositivo_id ?? '—',
+    t.origen         ?? '—',
+  ]);
+  const hojaTrab = XLSX.utils.aoa_to_sheet([cab, ...filas]);
+  hojaTrab['!cols'] = [6, 14, 24, 24, 22, 18, 20, 16].map(wch => ({ wch }));
+  XLSX.utils.book_append_sheet(libro, hojaTrab, 'Trabajadores');
+
+  XLSX.writeFile(libro, `rutas-jornada-${jornada?.id_jornada ?? 'x'}-${jornada?.fecha ?? 'sin-fecha'}.xlsx`);
+}
+
 // ─── Excel lista completa ─────────────────────────────────────────────────────
 export function exportToExcel(reportes, fecha, tipo) {
   if (!reportes.length) return;

@@ -69,6 +69,27 @@ export function apiGetRutasDashboard() {
   return apiFetch('/dashboard/rutas');
 }
 
+// Reportes de Rutas: lista de jornadas con filtros opcionales
+export function apiGetRutasReportes({ fecha, id_turno, id_ruta, placa, estado, limit = 100, offset = 0 } = {}) {
+  const params = new URLSearchParams({ limit, offset });
+  if (fecha)    params.set('fecha',    fecha);
+  if (id_turno) params.set('id_turno', id_turno);
+  if (id_ruta)  params.set('id_ruta',  id_ruta);
+  if (placa)    params.set('placa',    placa);
+  if (estado)   params.set('estado',   estado);
+  return apiFetch(`/dashboard/rutas/reportes?${params}`);
+}
+
+// Resumen estadístico de una jornada (marcados, asignados, faltantes)
+export function apiGetRutasJornadaResumen(id) {
+  return apiFetch(`/dashboard/rutas/reportes/${id}/resumen`);
+}
+
+// Lista de trabajadores marcados en una jornada
+export function apiGetRutasJornadaDetalle(id) {
+  return apiFetch(`/dashboard/rutas/reportes/${id}/detalle`);
+}
+
 // Detalle completo de un reporte (cabecera + contenido interno)
 export function apiGetTrabundaReporteDetalle(id) {
   return apiFetch(`/dashboard/trabunda/reportes/${id}/detalle`);

@@ -353,6 +353,59 @@ app.get("/dashboard/rutas", verifyToken, requirePermission("rutas"), async (_req
 });
 
 
+// ─── REPORTES DE RUTAS: lista de jornadas ────────────────────────────────────
+// Filtros: fecha (requerido), id_turno, id_ruta, placa, estado, limit, offset
+app.get("/dashboard/rutas/reportes", verifyToken, requirePermission("rutas"), async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Rutas no configurado en .env" });
+  }
+  try {
+    const fecha = req.query.fecha || new Date().toISOString().split("T")[0];
+    const params = new URLSearchParams({ fecha });
+    if (req.query.id_turno) params.set("id_turno", req.query.id_turno);
+    if (req.query.id_ruta)  params.set("id_ruta",  req.query.id_ruta);
+    if (req.query.placa)    params.set("placa",     String(req.query.placa).toUpperCase());
+    if (req.query.estado)   params.set("estado",    req.query.estado);
+    params.set("limit",  req.query.limit  ?? "100");
+    params.set("offset", req.query.offset ?? "0");
+
+    const data = await fetchService(getRutasToken, "rutas", `${base}/reportes/jornadas?${params}`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener reportes de Rutas", detail: err.message });
+  }
+});
+
+// ─── REPORTES DE RUTAS: resumen de una jornada ───────────────────────────────
+app.get("/dashboard/rutas/reportes/:id/resumen", verifyToken, requirePermission("rutas"), async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/reportes/jornada/${req.params.id}/resumen`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener el resumen de la jornada", detail: err.message });
+  }
+});
+
+// ─── REPORTES DE RUTAS: trabajadores de una jornada ──────────────────────────
+app.get("/dashboard/rutas/reportes/:id/detalle", verifyToken, requirePermission("rutas"), async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/reportes/jornada/${req.params.id}/detalle`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener el detalle de la jornada", detail: err.message });
+  }
+});
+
+
 // ─── PROXIES INTERNOS (implementación manual con fetch) ──────────────────────
 // Reenvía la petición al servicio interno quitando el prefijo del path.
 // Usamos fetch directamente en lugar de http-proxy-middleware para evitar
