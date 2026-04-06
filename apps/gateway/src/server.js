@@ -219,13 +219,12 @@ app.post("/dashboard/trabunda/admin/usuarios", verifyToken, requireSuperadmin, a
   try {
     const { username, password, nombre, roles } = req.body;
 
-    // Normalizamos roles: el backend puede esperar string o array — enviamos lo que viene
-    // pero si es string lo dejamos como string (el backend de Trabunda lo define)
-    const rolesPayload = roles;
+    // El backend de Trabunda espera roles como array: ["PLANILLERO"]
+    const rolesPayload = Array.isArray(roles) ? roles : [roles];
 
-    console.log(`[Trabunda] Creando usuario "${username}" con rol "${roles}" → POST ${base}/register`);
+    console.log(`[Trabunda] Creando usuario "${username}" con rol "${rolesPayload}" → POST ${base}/auth/register`);
 
-    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/register`, {
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/auth/register`, {
       method: "POST",
       body: JSON.stringify({ username, password, nombre, roles: rolesPayload }),
     });
