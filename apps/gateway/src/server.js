@@ -194,15 +194,18 @@ app.delete("/admin/users/:id", verifyToken, requireSuperadmin, async (req, res) 
 
 
 // ─── ADMIN TRABUNDA: Crear usuario en el backend de Trabunda (solo superadmin) ─
+// Body esperado: { username, password, nombre, roles }
+// Roles válidos: ADMINISTRADOR | PLANILLERO | SANEAMIENTO
 app.post("/dashboard/trabunda/admin/usuarios", verifyToken, requireSuperadmin, async (req, res) => {
   const base = process.env.TRABUNDA_BACKEND_URL;
   if (!base || !process.env.TRABUNDA_ADMIN_USER) {
     return res.status(503).json({ configured: false, error: "Backend de Trabunda no configurado en .env" });
   }
   try {
-    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/admin/usuarios`, {
+    const { username, password, nombre, roles } = req.body;
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/register`, {
       method: "POST",
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({ username, password, nombre, roles }),
     });
     res.status(data.ok === false ? 409 : 201).json(data);
   } catch (err) {

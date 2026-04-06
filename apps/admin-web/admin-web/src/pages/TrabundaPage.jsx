@@ -519,15 +519,25 @@ function TabReportes() {
 // ─── Modal: Crear usuario Trabunda ────────────────────────────────────────────
 
 const ROL_INFO = {
-  ADMIN: {
+  ADMINISTRADOR: {
     label: 'Administrador',
-    descripcion: 'Puede crear y gestionar todos los reportes del sistema Trabunda (planillero, supervisor, etc.).',
+    descripcion: 'Acceso completo: gestiona usuarios, áreas y todos los reportes del sistema.',
     color: 'violet',
+  },
+  PLANILLERO: {
+    label: 'Planillero',
+    descripcion: 'Crea y gestiona reportes de Apoyo Horas y Trabajo Avance.',
+    color: 'blue',
+  },
+  SANEAMIENTO: {
+    label: 'Saneamiento',
+    descripcion: 'Crea y gestiona reportes de Saneamiento e higiene por área.',
+    color: 'emerald',
   },
 };
 
 function ModalCrearUsuario({ onClose, onCreated }) {
-  const [form, setForm]         = useState({ username: '', nombre: '', password: '', rol: 'ADMIN' }); // rol siempre ADMIN en Trabunda
+  const [form, setForm]         = useState({ username: '', nombre: '', password: '', roles: 'ADMINISTRADOR' });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
@@ -548,10 +558,10 @@ function ModalCrearUsuario({ onClose, onCreated }) {
         username: form.username.trim().toLowerCase(),
         nombre:   form.nombre.trim() || undefined,
         password: form.password,
-        rol:      form.rol,
+        roles:    form.roles,
       });
       if (res?.ok === false) throw new Error(res.error ?? res.message ?? 'Error al crear el usuario');
-      onCreated({ username: form.username.trim().toLowerCase(), nombre: form.nombre.trim(), rol: form.rol });
+      onCreated({ username: form.username.trim().toLowerCase(), nombre: form.nombre.trim(), roles: form.roles });
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }
@@ -586,16 +596,34 @@ function ModalCrearUsuario({ onClose, onCreated }) {
             </div>
           )}
 
-          {/* Rol — solo ADMIN disponible en Trabunda */}
+          {/* Rol */}
           <div>
-            <label className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Rol</label>
-            <div className="p-3 rounded-xl border-2 border-violet-400 bg-violet-50">
-              <p className="text-xs font-bold text-violet-700">ADMIN — Administrador</p>
-              <p className="text-[11px] text-violet-500 mt-0.5 leading-tight">{ROL_INFO.ADMIN.descripcion}</p>
+            <label className="text-xs font-semibold text-slate-500 mb-2 block uppercase tracking-wide">Rol <span className="text-red-400">*</span></label>
+            <div className="grid grid-cols-1 gap-2">
+              {Object.entries(ROL_INFO).map(([key, info]) => {
+                const selected = form.roles === key;
+                const styles = {
+                  violet:  { border: selected ? 'border-violet-500 bg-violet-50'  : 'border-slate-200 hover:border-violet-300',  title: selected ? 'text-violet-700'  : 'text-slate-600', badge: 'bg-violet-100 text-violet-700'  },
+                  blue:    { border: selected ? 'border-blue-500 bg-blue-50'      : 'border-slate-200 hover:border-blue-300',    title: selected ? 'text-blue-700'    : 'text-slate-600', badge: 'bg-blue-100 text-blue-700'      },
+                  emerald: { border: selected ? 'border-emerald-500 bg-emerald-50': 'border-slate-200 hover:border-emerald-300', title: selected ? 'text-emerald-700' : 'text-slate-600', badge: 'bg-emerald-100 text-emerald-700' },
+                };
+                const s = styles[info.color];
+                return (
+                  <button key={key} type="button"
+                    onClick={() => setForm(p => ({ ...p, roles: key }))}
+                    className={`p-3 rounded-xl border-2 text-left transition-all flex items-start gap-3 ${s.border}`}>
+                    <div className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center
+                      ${selected ? (info.color === 'violet' ? 'border-violet-500' : info.color === 'blue' ? 'border-blue-500' : 'border-emerald-500') : 'border-slate-300'}`}>
+                      {selected && <div className={`w-2 h-2 rounded-full ${info.color === 'violet' ? 'bg-violet-500' : info.color === 'blue' ? 'bg-blue-500' : 'bg-emerald-500'}`} />}
+                    </div>
+                    <div>
+                      <p className={`text-xs font-bold ${s.title}`}>{info.label}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">{info.descripcion}</p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            <p className="text-[11px] text-slate-400 mt-1.5">
-              El rol <strong>Scanner</strong> pertenece a la app <strong>Rutas</strong>, no a Trabunda.
-            </p>
           </div>
 
           {/* Username */}
@@ -672,7 +700,7 @@ function UsuarioCreatedCard({ user, onDismiss }) {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const info = ROL_INFO[user.rol] ?? { label: user.rol, color: 'slate' };
+  const info = ROL_INFO[user.roles] ?? { label: user.roles, color: 'slate' };
   const colors = {
     violet: { bg: 'bg-violet-50', border: 'border-violet-200', badge: 'bg-violet-100 text-violet-700', icon: 'text-violet-500' },
     blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',   badge: 'bg-blue-100 text-blue-700',     icon: 'text-blue-500'   },
@@ -732,18 +760,20 @@ function TabUsuarios({ data }) {
       </div>
 
       {/* Roles disponibles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {Object.entries(ROL_INFO).map(([key, info]) => {
-          const isViolet = info.color === 'violet';
+          const palette = {
+            violet:  { wrap: 'bg-violet-50 border-violet-200',   badge: 'bg-violet-100 text-violet-700',   title: 'text-violet-800',  desc: 'text-violet-600'  },
+            blue:    { wrap: 'bg-blue-50 border-blue-200',       badge: 'bg-blue-100 text-blue-700',       title: 'text-blue-800',    desc: 'text-blue-600'    },
+            emerald: { wrap: 'bg-emerald-50 border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', title: 'text-emerald-800', desc: 'text-emerald-600' },
+          }[info.color];
           return (
-            <div key={key} className={`rounded-2xl border p-5 ${isViolet ? 'bg-violet-50 border-violet-200' : 'bg-blue-50 border-blue-200'}`}>
+            <div key={key} className={`rounded-2xl border p-5 ${palette.wrap}`}>
               <div className="flex items-center gap-2 mb-2">
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isViolet ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
-                  {key}
-                </span>
-                <span className={`font-bold text-sm ${isViolet ? 'text-violet-800' : 'text-blue-800'}`}>{info.label}</span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${palette.badge}`}>{key}</span>
+                <span className={`font-bold text-sm ${palette.title}`}>{info.label}</span>
               </div>
-              <p className={`text-xs leading-relaxed ${isViolet ? 'text-violet-600' : 'text-blue-600'}`}>{info.descripcion}</p>
+              <p className={`text-xs leading-relaxed ${palette.desc}`}>{info.descripcion}</p>
             </div>
           );
         })}
@@ -801,9 +831,9 @@ function TabUsuarios({ data }) {
                     <td className="px-4 py-3 text-slate-600">{u.nombre ?? u.display_name ?? '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full
-                        ${u.rol === 'ADMIN'      ? 'bg-violet-100 text-violet-700' :
-                          u.rol === 'SCANNER'    ? 'bg-blue-100 text-blue-700' :
-                          u.rol === 'PLANILLERO' ? 'bg-emerald-100 text-emerald-700' :
+                        ${u.rol === 'ADMINISTRADOR' ? 'bg-violet-100 text-violet-700'  :
+                          u.rol === 'PLANILLERO'    ? 'bg-blue-100 text-blue-700'      :
+                          u.rol === 'SANEAMIENTO'   ? 'bg-emerald-100 text-emerald-700':
                           'bg-slate-100 text-slate-600'}`}>
                         {u.rol ?? '—'}
                       </span>

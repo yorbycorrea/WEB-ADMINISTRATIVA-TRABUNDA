@@ -97,11 +97,12 @@ export function apiGetTrabundaReporteDetalle(id) {
 
 // ─── Admin Trabunda (solo superadmin) ────────────────────────────────────────
 
-// Crea un usuario ADMIN o SCANNER en el backend de Trabunda
-export function apiCrearUsuarioTrabunda({ username, nombre, password, rol }) {
+// Crea un usuario en el backend de Trabunda
+// roles: 'ADMINISTRADOR' | 'PLANILLERO' | 'SANEAMIENTO'
+export function apiCrearUsuarioTrabunda({ username, nombre, password, roles }) {
   return apiFetch('/dashboard/trabunda/admin/usuarios', {
     method: 'POST',
-    body: JSON.stringify({ username, nombre, password, rol }),
+    body: JSON.stringify({ username, nombre, password, roles }),
   });
 }
 
