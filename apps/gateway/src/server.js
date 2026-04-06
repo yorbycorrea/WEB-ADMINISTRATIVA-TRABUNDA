@@ -67,10 +67,25 @@ async function fetchService(getToken, invalidateName, url, options = {}) {
       ...options.headers,
     },
   });
+
   if (res.status === 401 || res.status === 403) {
     invalidateToken(invalidateName);
     throw new Error(`Backend rechazó el token del Admin Suite (${res.status})`);
   }
+
+  // Para respuestas no-OK (ej: 400, 404, 500) intentamos parsear el body
+  // y re-lanzamos con el detalle real del backend.
+  if (!res.ok) {
+    const text = await res.text();
+    let detail;
+    try   { detail = JSON.parse(text); }
+    catch { detail = text; }
+    const err = new Error(`Backend devolvió HTTP ${res.status} en ${url}`);
+    err.backendStatus = res.status;
+    err.backendDetail = detail;
+    throw err;
+  }
+
   return res.json();
 }
 
@@ -203,12 +218,30 @@ app.post("/dashboard/trabunda/admin/usuarios", verifyToken, requireSuperadmin, a
   }
   try {
     const { username, password, nombre, roles } = req.body;
+
+    // Normalizamos roles: el backend puede esperar string o array — enviamos lo que viene
+    // pero si es string lo dejamos como string (el backend de Trabunda lo define)
+    const rolesPayload = roles;
+
+    console.log(`[Trabunda] Creando usuario "${username}" con rol "${roles}" → POST ${base}/register`);
+
     const data = await fetchService(getTrabundaToken, "trabunda", `${base}/register`, {
       method: "POST",
-      body: JSON.stringify({ username, password, nombre, roles }),
+      body: JSON.stringify({ username, password, nombre, roles: rolesPayload }),
     });
-    res.status(data.ok === false ? 409 : 201).json(data);
+
+    console.log(`[Trabunda] Usuario creado:`, JSON.stringify(data));
+    res.status(201).json(data);
   } catch (err) {
+    console.error(`[Trabunda] Error al crear usuario:`, err.message, err.backendDetail ?? "");
+    // Si el backend rechazó (4xx), reenviar el código y detalle real
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({
+        ok: false,
+        error: "El backend de Trabunda rechazó la petición",
+        detail: err.backendDetail ?? err.message,
+      });
+    }
     res.status(502).json({ ok: false, error: "No se pudo crear el usuario en Trabunda", detail: err.message });
   }
 });

@@ -560,7 +560,13 @@ function ModalCrearUsuario({ onClose, onCreated }) {
         password: form.password,
         roles:    form.roles,
       });
-      if (res?.ok === false) throw new Error(res.error ?? res.message ?? 'Error al crear el usuario');
+      if (res?.ok === false) {
+        const msg  = res.error ?? res.message ?? 'Error al crear el usuario';
+        const det  = res.detail
+          ? (typeof res.detail === 'string' ? res.detail : JSON.stringify(res.detail))
+          : null;
+        throw new Error(det ? `${msg}: ${det}` : msg);
+      }
       onCreated({ username: form.username.trim().toLowerCase(), nombre: form.nombre.trim(), roles: form.roles });
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
