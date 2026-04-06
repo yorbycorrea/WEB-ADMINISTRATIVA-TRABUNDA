@@ -478,6 +478,61 @@ app.put("/dashboard/rutas/admin/rutas/:id/toggle", verifyToken, requireSuperadmi
   }
 });
 
+// ─── ADMIN RUTAS: Listar áreas activas (solo superadmin) ─────────────────────
+app.get("/dashboard/rutas/admin/areas", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/areas?activo=1&limit=100`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener las áreas", detail: err.message });
+  }
+});
+
+// ─── ADMIN RUTAS: Asignar área a un trabajador por DNI (solo superadmin) ──────
+app.put("/dashboard/rutas/admin/trabajadores/:dni/area", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/${req.params.dni}/area`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "Error al asignar área", detail: err.message });
+  }
+});
+
+// ─── ADMIN RUTAS: Asignación masiva de área a múltiples DNIs (solo superadmin) ─
+// Body: { id_area, dnis: ["12345678", ...] }
+app.put("/dashboard/rutas/admin/trabajadores/area/bulk", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/area/bulk`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "Error en asignación masiva", detail: err.message });
+  }
+});
+
 // ─── ADMIN RUTAS: Trabajadores escaneados sin área asignada (solo superadmin) ─
 app.get("/dashboard/rutas/admin/trabajadores-sin-area", verifyToken, requireSuperadmin, async (req, res) => {
   const base = process.env.RUTAS_BACKEND_URL;

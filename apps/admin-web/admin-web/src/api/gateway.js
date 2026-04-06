@@ -143,6 +143,27 @@ export function apiGetTrabajadoresSinArea({ fecha, id_ruta } = {}) {
   return apiFetch(`/dashboard/rutas/admin/trabajadores-sin-area?${params}`);
 }
 
+// Listar todas las áreas activas del sistema Rutas
+export function apiGetRutasAreas() {
+  return apiFetch('/dashboard/rutas/admin/areas');
+}
+
+// Asignar área a un trabajador individual por DNI
+export function apiAsignarAreaTrabajador(dni, id_area) {
+  return apiFetch(`/dashboard/rutas/admin/trabajadores/${dni}/area`, {
+    method: 'PUT',
+    body: JSON.stringify({ id_area }),
+  });
+}
+
+// Asignar un área a múltiples trabajadores a la vez
+export function apiAsignarAreaBulk(id_area, dnis) {
+  return apiFetch('/dashboard/rutas/admin/trabajadores/area/bulk', {
+    method: 'PUT',
+    body: JSON.stringify({ id_area, dnis }),
+  });
+}
+
 // ─── Gestión de usuarios (solo superadmin) ────────────────────────────────────
 
 export function apiGetUsers() {

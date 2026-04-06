@@ -16,6 +16,9 @@ import {
   apiCreateRuta,
   apiToggleRuta,
   apiGetTrabajadoresSinArea,
+  apiGetRutasAreas,
+  apiAsignarAreaTrabajador,
+  apiAsignarAreaBulk,
 } from '../api/gateway';
 import {
   exportRutasJornadasPDF,
@@ -745,15 +748,38 @@ function SeccionGestionRutas() {
 
 function SeccionTrabajadoresSinArea() {
   const today = new Date().toISOString().split('T')[0];
-  const [filters,   setFilters]   = useState({ fecha: today, id_ruta: '' });
-  const [applied,   setApplied]   = useState({ fecha: today, id_ruta: '' });
-  const [workers,   setWorkers]   = useState([]);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState(null);
-  const [fechaRes,  setFechaRes]  = useState('');
+  const [filters,    setFilters]    = useState({ fecha: today, id_ruta: '' });
+  const [applied,    setApplied]    = useState({ fecha: today, id_ruta: '' });
+  const [workers,    setWorkers]    = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
+  const [fechaRes,   setFechaRes]   = useState('');
+
+  // Áreas disponibles
+  const [areas,      setAreas]      = useState([]);
+  const [loadingAreas, setLoadingAreas] = useState(true);
+
+  // Asignación individual: { [dni]: id_area_seleccionada }
+  const [selArea,    setSelArea]    = useState({});
+  // Estado de asignación por fila: { [dni]: 'loading' | 'ok' | 'error' | null }
+  const [asignState, setAsignState] = useState({});
+
+  // Asignación masiva
+  const [bulkArea,   setBulkArea]   = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkMsg,    setBulkMsg]    = useState(null); // { type: 'ok'|'error', text }
+
+  // Carga áreas al montar
+  useEffect(() => {
+    apiGetRutasAreas()
+      .then(res => setAreas(res?.items ?? []))
+      .catch(() => setAreas([]))
+      .finally(() => setLoadingAreas(false));
+  }, []);
 
   const load = useCallback(async (f) => {
     setLoading(true); setError(null);
+    setSelArea({}); setAsignState({}); setBulkMsg(null);
     try {
       const res = await apiGetTrabajadoresSinArea({
         fecha:   f.fecha   || undefined,
@@ -770,6 +796,44 @@ function SeccionTrabajadoresSinArea() {
 
   function handleBuscar() { setApplied({ ...filters }); }
 
+  // Asignación individual
+  async function handleAsignarUno(dni) {
+    const id_area = Number(selArea[dni]);
+    if (!id_area) return;
+    setAsignState(p => ({ ...p, [dni]: 'loading' }));
+    try {
+      const res = await apiAsignarAreaTrabajador(dni, id_area);
+      if (res?.ok === false) throw new Error(res.error ?? res.message ?? 'Error');
+      setAsignState(p => ({ ...p, [dni]: 'ok' }));
+      // Quitar de la lista después de 800ms
+      setTimeout(() => setWorkers(prev => prev.filter(w => w.dni !== dni)), 800);
+    } catch (e) {
+      setAsignState(p => ({ ...p, [dni]: 'error' }));
+      setTimeout(() => setAsignState(p => ({ ...p, [dni]: null })), 3000);
+    }
+  }
+
+  // Asignación masiva (todos los que están en la lista)
+  async function handleAsignarTodos() {
+    const id_area = Number(bulkArea);
+    if (!id_area || workers.length === 0) return;
+    setBulkLoading(true); setBulkMsg(null);
+    try {
+      const dnis = workers.map(w => w.dni);
+      const res = await apiAsignarAreaBulk(id_area, dnis);
+      if (res?.ok === false) throw new Error(res.error ?? res.message ?? 'Error');
+      setBulkMsg({ type: 'ok', text: `✓ ${res.actualizados ?? dnis.length} trabajador(es) asignados correctamente` });
+      // Refrescar la lista
+      setTimeout(() => load(applied), 600);
+    } catch (e) {
+      setBulkMsg({ type: 'error', text: e.message });
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  const areaSel = (dni) => areas.find(a => a.id_area === Number(selArea[dni]));
+
   return (
     <div className="space-y-5">
       {/* Info banner */}
@@ -779,12 +843,12 @@ function SeccionTrabajadoresSinArea() {
           <p className="text-sm font-semibold text-amber-800">Trabajadores sin área de trabajo asignada</p>
           <p className="text-xs text-amber-600 mt-0.5 leading-relaxed">
             Estas personas fueron escaneadas en la fecha seleccionada pero no tienen un área asignada en el sistema
-            (<code className="bg-amber-100 px-1 rounded">id_area</code> es nulo). La asignación de área se realizará próximamente desde esta misma sección.
+            (<code className="bg-amber-100 px-1 rounded">id_area</code> es nulo). Usa el selector de área para asignarlas.
           </p>
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros de búsqueda */}
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex items-end gap-3 flex-wrap">
           <div>
@@ -804,8 +868,7 @@ function SeccionTrabajadoresSinArea() {
           </div>
           <button onClick={handleBuscar} disabled={loading}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-all disabled:opacity-50">
-            <Search size={14} />
-            Buscar
+            <Search size={14} /> Buscar
           </button>
           {filters.id_ruta && (
             <button onClick={() => { setFilters(p => ({ ...p, id_ruta: '' })); setApplied(p => ({ ...p, id_ruta: '' })); }}
@@ -820,6 +883,45 @@ function SeccionTrabajadoresSinArea() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
           <XCircle size={15} className="text-red-500 flex-shrink-0" />
           <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Asignación masiva — solo cuando hay trabajadores */}
+      {workers.length > 0 && (
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+          <p className="text-xs font-bold text-violet-800 uppercase tracking-wider mb-3">
+            Asignación masiva — asignar el mismo área a todos los {workers.length} trabajadores de la lista
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={bulkArea}
+              onChange={e => setBulkArea(e.target.value)}
+              disabled={loadingAreas}
+              className="px-3 py-2 text-sm border border-violet-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 min-w-[220px]"
+            >
+              <option value="">— Seleccionar área —</option>
+              {areas.map(a => (
+                <option key={a.id_area} value={a.id_area}>{a.nombre} ({a.codigo})</option>
+              ))}
+            </select>
+            <button
+              onClick={handleAsignarTodos}
+              disabled={!bulkArea || bulkLoading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-all disabled:opacity-40 shadow-sm shadow-violet-200"
+            >
+              {bulkLoading
+                ? <><RefreshCw size={13} className="animate-spin" /> Asignando...</>
+                : <><MapPin size={13} /> Asignar a todos</>
+              }
+            </button>
+          </div>
+          {bulkMsg && (
+            <div className={`mt-3 flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg
+              ${bulkMsg.type === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+              {bulkMsg.type === 'ok' ? <CheckCircle size={13} /> : <XCircle size={13} />}
+              {bulkMsg.text}
+            </div>
+          )}
         </div>
       )}
 
@@ -841,7 +943,7 @@ function SeccionTrabajadoresSinArea() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {['N°', 'DNI', 'Apellidos y Nombres', 'Cargo', 'ID Ruta', 'ID Área actual', 'Origen'].map(col => (
+                {['N°', 'DNI', 'Apellidos y Nombres', 'Cargo', 'Ruta', 'Origen', 'Asignar área'].map(col => (
                   <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr>
@@ -851,9 +953,7 @@ function SeccionTrabajadoresSinArea() {
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-slate-100">
                     {Array.from({ length: 7 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <div className="h-4 bg-slate-200 rounded animate-pulse" />
-                      </td>
+                      <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-200 rounded animate-pulse" /></td>
                     ))}
                   </tr>
                 ))
@@ -866,41 +966,70 @@ function SeccionTrabajadoresSinArea() {
                   </td>
                 </tr>
               ) : (
-                workers.map((w, i) => (
-                  <tr key={w.id_trabajador} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
-                    <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i + 1}</td>
-                    <td className="px-4 py-3 font-mono text-slate-700">{w.dni ?? '—'}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {`${(w.apellidos ?? '').toUpperCase()} ${w.nombres ?? ''}`.trim() || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{w.cargo || '—'}</td>
-                    <td className="px-4 py-3 text-center">
-                      {w.id_ruta
-                        ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">#{w.id_ruta}</span>
-                        : <span className="text-xs text-slate-300">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Sin área</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{w.origen_registro ?? '—'}</span>
-                    </td>
-                  </tr>
-                ))
+                workers.map((w, i) => {
+                  const state = asignState[w.dni];
+                  const isOk  = state === 'ok';
+                  const isErr = state === 'error';
+                  const isBusy = state === 'loading';
+                  return (
+                    <tr key={w.id_trabajador}
+                      className={`border-b border-slate-100 transition-colors last:border-0
+                        ${isOk ? 'bg-emerald-50' : isErr ? 'bg-red-50' : 'hover:bg-slate-50'}`}>
+                      <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i + 1}</td>
+                      <td className="px-4 py-3 font-mono text-slate-700 text-xs">{w.dni ?? '—'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800 text-xs">
+                        {`${(w.apellidos ?? '').toUpperCase()} ${w.nombres ?? ''}`.trim() || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{w.cargo || '—'}</td>
+                      <td className="px-4 py-3 text-center">
+                        {w.id_ruta
+                          ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">#{w.id_ruta}</span>
+                          : <span className="text-xs text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{w.origen_registro ?? '—'}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        {isOk ? (
+                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                            <CheckCircle size={13} /> Asignado
+                          </span>
+                        ) : isErr ? (
+                          <span className="text-xs text-red-500 font-medium">Error — reintentar</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={selArea[w.dni] ?? ''}
+                              onChange={e => setSelArea(p => ({ ...p, [w.dni]: e.target.value }))}
+                              disabled={isBusy || loadingAreas}
+                              className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-violet-400 max-w-[170px]"
+                            >
+                              <option value="">— Área —</option>
+                              {areas.map(a => (
+                                <option key={a.id_area} value={a.id_area}>{a.nombre}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleAsignarUno(w.dni)}
+                              disabled={!selArea[w.dni] || isBusy}
+                              className="flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-all disabled:opacity-40 whitespace-nowrap"
+                            >
+                              {isBusy
+                                ? <RefreshCw size={11} className="animate-spin" />
+                                : <MapPin size={11} />
+                              }
+                              Asignar
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
-
-        {workers.length > 0 && (
-          <div className="px-5 py-3 border-t border-slate-100 bg-amber-50 flex items-center gap-2">
-            <MapPin size={13} className="text-amber-600" />
-            <p className="text-xs text-amber-700">
-              La asignación de área para estos trabajadores estará disponible próximamente en esta misma sección.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
