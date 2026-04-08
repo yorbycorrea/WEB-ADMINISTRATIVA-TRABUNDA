@@ -67,6 +67,9 @@ services:
       - RUTAS_BACKEND_URL=${RUTAS_BACKEND_URL}
       - RUTAS_ADMIN_USER=${RUTAS_ADMIN_USER}
       - RUTAS_ADMIN_PASS=${RUTAS_ADMIN_PASS}
+      - CALIDAD_BACKEND_URL=${CALIDAD_BACKEND_URL}
+      - CALIDAD_ADMIN_USER=${CALIDAD_ADMIN_USER}
+      - CALIDAD_ADMIN_PASS=${CALIDAD_ADMIN_PASS}
     depends_on:
       postgres:
         condition: service_healthy   # espera a que postgres esté listo

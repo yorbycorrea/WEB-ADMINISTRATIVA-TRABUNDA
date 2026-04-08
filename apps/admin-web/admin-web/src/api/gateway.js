@@ -164,6 +164,47 @@ export function apiAsignarAreaBulk(id_area, dnis) {
   });
 }
 
+// ─── Calidad ──────────────────────────────────────────────────────────────────
+export function apiGetCalidadDashboard() { return apiFetch('/dashboard/calidad'); }
+
+export function apiGetCalidadReportesPesos({ page=1, limit=25, fecha, q } = {}) {
+  const p = new URLSearchParams({ page, limit });
+  if (fecha) p.set('fecha', fecha);
+  if (q)     p.set('q', q);
+  return apiFetch(`/dashboard/calidad/reportes/pesos?${p}`);
+}
+export function apiGetCalidadPesoDetalle(id) { return apiFetch(`/dashboard/calidad/reportes/pesos/${id}`); }
+
+export function apiGetCalidadReportesTemperatura({ page=1, limit=25, fecha } = {}) {
+  const p = new URLSearchParams({ page, limit });
+  if (fecha) p.set('fecha', fecha);
+  return apiFetch(`/dashboard/calidad/reportes/temperatura?${p}`);
+}
+export function apiGetCalidadTemperaturaDetalle(id) { return apiFetch(`/dashboard/calidad/reportes/temperatura/${id}`); }
+
+export function apiGetCalidadReportesOrganoletica({ page=1, limit=25, fecha } = {}) {
+  const p = new URLSearchParams({ page, limit });
+  if (fecha) p.set('fecha', fecha);
+  return apiFetch(`/dashboard/calidad/reportes/organoletica?${p}`);
+}
+export function apiGetCalidadOrganoleticaDetalle(id) { return apiFetch(`/dashboard/calidad/reportes/organoletica/${id}`); }
+
+export function apiGetCalidadOcrEstado() { return apiFetch('/dashboard/calidad/ocr/estado'); }
+
+// Admin
+export function apiGetCalidadProductos() { return apiFetch('/dashboard/calidad/admin/productos'); }
+export function apiCreateCalidadProducto(data) { return apiFetch('/dashboard/calidad/admin/productos', { method:'POST', body: JSON.stringify(data) }); }
+export function apiUpdateCalidadProducto(id, data) { return apiFetch(`/dashboard/calidad/admin/productos/${id}`, { method:'PUT', body: JSON.stringify(data) }); }
+export function apiToggleCalidadProducto(id, activo) { return apiFetch(`/dashboard/calidad/admin/productos/${id}/activo`, { method:'PATCH', body: JSON.stringify({ activo }) }); }
+export function apiGetCalidadSupervisores() { return apiFetch('/dashboard/calidad/admin/supervisores'); }
+export function apiGetCalidadOrugas() { return apiFetch('/dashboard/calidad/admin/orugas'); }
+export function apiUpdateCalidadPeso(id, data) { return apiFetch(`/dashboard/calidad/admin/pesos/${id}`, { method:'PUT', body: JSON.stringify(data) }); }
+export function apiDeleteCalidadPeso(id) { return apiFetch(`/dashboard/calidad/admin/pesos/${id}`, { method:'DELETE' }); }
+export function apiUpdateCalidadTemperatura(id, data) { return apiFetch(`/dashboard/calidad/admin/temperatura/${id}`, { method:'PUT', body: JSON.stringify(data) }); }
+export function apiDeleteCalidadTemperatura(id) { return apiFetch(`/dashboard/calidad/admin/temperatura/${id}`, { method:'DELETE' }); }
+export function apiUpdateCalidadOrganoletica(id, data) { return apiFetch(`/dashboard/calidad/admin/organoletica/${id}`, { method:'PUT', body: JSON.stringify(data) }); }
+export function apiDeleteCalidadOrganoletica(id) { return apiFetch(`/dashboard/calidad/admin/organoletica/${id}`, { method:'DELETE' }); }
+
 // ─── Gestión de usuarios (solo superadmin) ────────────────────────────────────
 
 export function apiGetUsers() {

@@ -11,7 +11,7 @@ const tokenCache = new Map();
  * Obtiene un token para un servicio. Si el cache es válido lo reutiliza,
  * si no, hace login y guarda el nuevo token.
  */
-async function getServiceToken(name, loginUrl, username, password) {
+async function getServiceToken(name, loginUrl, username, password, usernameField = "username") {
   const cached = tokenCache.get(name);
 
   // Verificamos que el token no venza en los próximos 5 minutos
@@ -23,7 +23,7 @@ async function getServiceToken(name, loginUrl, username, password) {
   const res = await fetch(loginUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ [usernameField]: username, password }),
   });
 
   if (!res.ok) {
@@ -63,6 +63,16 @@ export async function getRutasToken() {
     `${process.env.RUTAS_BACKEND_URL}/auth/login`,
     process.env.RUTAS_ADMIN_USER,
     process.env.RUTAS_ADMIN_PASS
+  );
+}
+
+export async function getCalidadToken() {
+  return getServiceToken(
+    "calidad",
+    `${process.env.CALIDAD_BACKEND_URL}/auth/login`,
+    process.env.CALIDAD_ADMIN_USER,
+    process.env.CALIDAD_ADMIN_PASS,
+    "usuario"
   );
 }
 

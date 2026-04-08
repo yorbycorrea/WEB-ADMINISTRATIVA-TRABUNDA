@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Activity, Settings,
-  ShieldCheck, LogOut, ChevronRight, Users
+  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -36,6 +36,7 @@ const ALL_NAV_ITEMS = [
   { to: '/',         icon: <LayoutDashboard size={20}/>, label: 'Overview',     permission: 'overview'  },
   { to: '/trabunda', icon: <TrabundaIcon size={20}/>,    label: 'Trabunda',     permission: 'trabunda'  },
   { to: '/rutas',    icon: <RutasIcon size={20}/>,       label: 'Rutas',        permission: 'rutas'     },
+  { to: '/calidad',  icon: <FlaskConical size={20}/>,    label: 'Calidad',      permission: 'calidad'   },
   { to: '/usuarios', icon: <Users size={20}/>,           label: 'Usuarios',     permission: 'users'     },
   { to: '/logs',     icon: <Activity size={20}/>,        label: 'System Logs',  permission: null        },
   { to: '/settings', icon: <Settings size={20}/>,        label: 'Settings',     permission: null        },

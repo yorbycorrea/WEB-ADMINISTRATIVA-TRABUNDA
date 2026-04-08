@@ -5,6 +5,7 @@ import Login       from './pages/Login';
 import Dashboard   from './pages/Dashboard';
 import TrabundaPage from './pages/TrabundaPage';
 import RutasPage    from './pages/RutasPage';
+import CalidadPage  from './pages/CalidadPage';
 import UsersPage    from './pages/UsersPage';
 
 export default function App() {
@@ -32,6 +33,12 @@ export default function App() {
           <Route path="/rutas" element={
             <ProtectedRoute permission="rutas">
               <RutasPage />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/calidad" element={
+            <ProtectedRoute permission="calidad">
+              <CalidadPage />
             </ProtectedRoute>
           } />
 

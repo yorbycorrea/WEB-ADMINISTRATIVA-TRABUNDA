@@ -4,7 +4,7 @@ import morgan from "morgan";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
 import { initDB } from "./db/index.js";
-import { getTrabundaToken, getRutasToken, invalidateToken } from "./services/serviceAuth.js";
+import { getTrabundaToken, getRutasToken, getCalidadToken, invalidateToken } from "./services/serviceAuth.js";
 import { getAllUsers, verifyUser, createUser, updateUser, deleteUser } from "./services/userStore.js";
 
 const app        = express();
@@ -172,7 +172,7 @@ app.post("/admin/users", verifyToken, requireSuperadmin, async (req, res) => {
   }
 
   // Validamos que los permisos sean valores conocidos
-  const VALID_PERMISSIONS = ["overview", "trabunda", "rutas"];
+  const VALID_PERMISSIONS = ["overview", "trabunda", "rutas", "calidad"];
   const invalid = (permissions || []).filter(p => !VALID_PERMISSIONS.includes(p));
   if (invalid.length) {
     return res.status(400).json({ error: `Permisos inválidos: ${invalid.join(", ")}` });
@@ -600,6 +600,403 @@ app.get("/dashboard/rutas/reportes/:id/detalle", verifyToken, requirePermission(
     res.json(data);
   } catch (err) {
     res.status(502).json({ error: "No se pudo obtener el detalle de la jornada", detail: err.message });
+  }
+});
+
+
+// ─── DASHBOARD DE CALIDAD (requiere permiso "calidad") ───────────────────────
+app.get("/dashboard/calidad", verifyToken, requirePermission("calidad"), async (_req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Calidad no configurado en .env" });
+  }
+  try {
+    const call = (path) => fetchService(getCalidadToken, "calidad", `${base}${path}`);
+
+    const [health, pesosReportes, temperatura, organoletica, supervisores, ocrEstado] = await Promise.allSettled([
+      fetch(`${base}/health`).then(r => r.json()).catch(() => null),
+      call("/pesos/reportes"),
+      call("/temperatura"),
+      call("/organoléptica"),
+      call("/catalogos/supervisores"),
+      call("/ocr/estado"),
+    ]);
+
+    const pesosData        = pesosReportes.status  === "fulfilled" ? pesosReportes.value  : null;
+    const temperaturaData  = temperatura.status    === "fulfilled" ? temperatura.value    : null;
+    const organoleticaData = organoletica.status   === "fulfilled" ? organoletica.value   : null;
+
+    const pesosItems        = Array.isArray(pesosData)        ? pesosData        : (pesosData?.items        ?? pesosData?.data        ?? []);
+    const temperaturaItems  = Array.isArray(temperaturaData)  ? temperaturaData  : (temperaturaData?.items  ?? temperaturaData?.data  ?? []);
+    const organoleticaItems = Array.isArray(organoleticaData) ? organoleticaData : (organoleticaData?.items ?? organoleticaData?.data ?? []);
+    const supervisoresItems = supervisores.status === "fulfilled"
+      ? (Array.isArray(supervisores.value) ? supervisores.value : (supervisores.value?.items ?? supervisores.value?.data ?? []))
+      : [];
+
+    res.json({
+      configured: true,
+      health:           health.status    === "fulfilled" ? health.value    : null,
+      pesosHoy:         { total: pesosItems.length,        items: pesosItems.slice(0, 10) },
+      temperaturaHoy:   { total: temperaturaItems.length,  items: temperaturaItems.slice(0, 10) },
+      organoleticaHoy:  { total: organoleticaItems.length, items: organoleticaItems.slice(0, 10) },
+      supervisores:     supervisoresItems,
+      ocrEstado:        ocrEstado.status === "fulfilled" ? ocrEstado.value : null,
+    });
+  } catch (err) {
+    res.status(502).json({ configured: true, error: "No se pudo conectar con Calidad", detail: err.message });
+  }
+});
+
+
+// ─── REPORTES DE CALIDAD: Pesos ───────────────────────────────────────────────
+app.get("/dashboard/calidad/reportes/pesos", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Calidad no configurado en .env" });
+  }
+  try {
+    const page  = req.query.page  || 1;
+    const limit = req.query.limit || 25;
+    const params = new URLSearchParams({ page, limit });
+    if (req.query.fecha) params.set("fecha", req.query.fecha);
+    if (req.query.q)     params.set("q",     req.query.q);
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/pesos?${params}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener pesos", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener reportes de pesos", detail: err.message });
+  }
+});
+
+app.get("/dashboard/calidad/reportes/pesos/:id", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/pesos/${req.params.id}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener peso", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener el detalle del peso", detail: err.message });
+  }
+});
+
+
+// ─── REPORTES DE CALIDAD: Temperatura ────────────────────────────────────────
+app.get("/dashboard/calidad/reportes/temperatura", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Calidad no configurado en .env" });
+  }
+  try {
+    const page  = req.query.page  || 1;
+    const limit = req.query.limit || 25;
+    const params = new URLSearchParams({ page, limit });
+    if (req.query.fecha) params.set("fecha", req.query.fecha);
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/temperatura?${params}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener temperatura", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener reportes de temperatura", detail: err.message });
+  }
+});
+
+app.get("/dashboard/calidad/reportes/temperatura/:id", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/temperatura/${req.params.id}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener temperatura", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener el detalle de temperatura", detail: err.message });
+  }
+});
+
+
+// ─── REPORTES DE CALIDAD: Organoléptica ──────────────────────────────────────
+app.get("/dashboard/calidad/reportes/organoletica", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Calidad no configurado en .env" });
+  }
+  try {
+    const page  = req.query.page  || 1;
+    const limit = req.query.limit || 25;
+    const params = new URLSearchParams({ page, limit });
+    if (req.query.fecha) params.set("fecha", req.query.fecha);
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica?${params}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener organoléptica", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener reportes de organoléptica", detail: err.message });
+  }
+});
+
+app.get("/dashboard/calidad/reportes/organoletica/:id", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica/${req.params.id}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener organoléptica", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener el detalle de organoléptica", detail: err.message });
+  }
+});
+
+
+// ─── OCR CALIDAD ──────────────────────────────────────────────────────────────
+app.get("/dashboard/calidad/ocr/estado", verifyToken, requirePermission("calidad"), async (_req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/ocr/estado`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener estado OCR", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener el estado OCR", detail: err.message });
+  }
+});
+
+
+// ─── ADMIN CALIDAD: Productos (solo superadmin) ───────────────────────────────
+app.get("/dashboard/calidad/admin/productos", verifyToken, requireSuperadmin, async (_req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/catalogos/productos/todos`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener productos", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener productos", detail: err.message });
+  }
+});
+
+app.post("/dashboard/calidad/admin/productos", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/catalogos/productos`, {
+      method: "POST",
+      body: JSON.stringify(req.body),
+    });
+    res.status(201).json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al crear producto", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo crear el producto", detail: err.message });
+  }
+});
+
+app.put("/dashboard/calidad/admin/productos/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/catalogos/productos/${req.params.id}`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al actualizar producto", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo actualizar el producto", detail: err.message });
+  }
+});
+
+app.patch("/dashboard/calidad/admin/productos/:id/activo", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/catalogos/productos/${req.params.id}/activo`, {
+      method: "PATCH",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al cambiar estado del producto", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo cambiar el estado del producto", detail: err.message });
+  }
+});
+
+
+// ─── ADMIN CALIDAD: Catálogos (solo superadmin) ───────────────────────────────
+app.get("/dashboard/calidad/admin/supervisores", verifyToken, requireSuperadmin, async (_req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/catalogos/supervisores`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener supervisores", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener supervisores", detail: err.message });
+  }
+});
+
+app.get("/dashboard/calidad/admin/orugas", verifyToken, requireSuperadmin, async (_req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/catalogos/orugas`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener orugas", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener orugas", detail: err.message });
+  }
+});
+
+
+// ─── ADMIN CALIDAD: Pesos (solo superadmin) ───────────────────────────────────
+app.put("/dashboard/calidad/admin/pesos/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/pesos/${req.params.id}`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al actualizar peso", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo actualizar el peso", detail: err.message });
+  }
+});
+
+app.delete("/dashboard/calidad/admin/pesos/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/pesos/${req.params.id}`, { method: "DELETE" });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al eliminar peso", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo eliminar el peso", detail: err.message });
+  }
+});
+
+
+// ─── ADMIN CALIDAD: Temperatura (solo superadmin) ─────────────────────────────
+app.put("/dashboard/calidad/admin/temperatura/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/temperatura/${req.params.id}`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al actualizar temperatura", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo actualizar temperatura", detail: err.message });
+  }
+});
+
+app.delete("/dashboard/calidad/admin/temperatura/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/temperatura/${req.params.id}`, { method: "DELETE" });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al eliminar temperatura", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo eliminar temperatura", detail: err.message });
+  }
+});
+
+
+// ─── ADMIN CALIDAD: Organoléptica (solo superadmin) ───────────────────────────
+app.put("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica/${req.params.id}`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al actualizar organoléptica", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo actualizar organoléptica", detail: err.message });
+  }
+});
+
+app.delete("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica/${req.params.id}`, { method: "DELETE" });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al eliminar organoléptica", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo eliminar organoléptica", detail: err.message });
   }
 });
 
