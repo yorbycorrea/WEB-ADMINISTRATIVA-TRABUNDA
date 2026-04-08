@@ -725,7 +725,7 @@ app.get("/dashboard/calidad/reportes/temperatura/:id", verifyToken, requirePermi
 });
 
 
-// ─── REPORTES DE CALIDAD: Organoléptica ──────────────────────────────────────
+// ─── REPORTES DE CALIDAD: Organoleptica ──────────────────────────────────────
 app.get("/dashboard/calidad/reportes/organoletica", verifyToken, requirePermission("calidad"), async (req, res) => {
   const base = process.env.CALIDAD_BACKEND_URL;
   if (!base || !process.env.CALIDAD_ADMIN_USER) {
@@ -740,9 +740,9 @@ app.get("/dashboard/calidad/reportes/organoletica", verifyToken, requirePermissi
     res.json(data);
   } catch (err) {
     if (err.backendStatus) {
-      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener organoléptica", detail: err.backendDetail ?? err.message });
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener organoleptica", detail: err.backendDetail ?? err.message });
     }
-    res.status(502).json({ error: "No se pudo obtener reportes de organoléptica", detail: err.message });
+    res.status(502).json({ error: "No se pudo obtener reportes de organoleptica", detail: err.message });
   }
 });
 
@@ -756,9 +756,9 @@ app.get("/dashboard/calidad/reportes/organoletica/:id", verifyToken, requirePerm
     res.json(data);
   } catch (err) {
     if (err.backendStatus) {
-      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener organoléptica", detail: err.backendDetail ?? err.message });
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener organoleptica", detail: err.backendDetail ?? err.message });
     }
-    res.status(502).json({ error: "No se pudo obtener el detalle de organoléptica", detail: err.message });
+    res.status(502).json({ error: "No se pudo obtener el detalle de organoleptica", detail: err.message });
   }
 });
 
@@ -997,6 +997,30 @@ app.delete("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSupe
       return res.status(err.backendStatus).json({ ok: false, error: "Error al eliminar organoléptica", detail: err.backendDetail ?? err.message });
     }
     res.status(502).json({ error: "No se pudo eliminar organoléptica", detail: err.message });
+  }
+});
+
+
+// ─── ADMIN RUTAS: Listar trabajadores con área (y ruta opcional) ─────────────
+// Llama a GET /trabajadores/con-area en el backend de Rutas
+// Params: id_area, id_ruta, con_ruta (1 = solo los que tienen ruta asignada)
+app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false, error: "Backend de Rutas no configurado en .env" });
+  }
+  try {
+    const params = new URLSearchParams();
+    if (req.query.id_area)  params.set("id_area",  req.query.id_area);
+    if (req.query.id_ruta)  params.set("id_ruta",  req.query.id_ruta);
+    if (req.query.con_ruta) params.set("con_ruta", req.query.con_ruta);
+    const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/con-area?${params}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo obtener trabajadores", detail: err.message });
   }
 });
 

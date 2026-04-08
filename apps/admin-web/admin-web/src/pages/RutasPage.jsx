@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RefreshCw, Truck, Users, ScanLine, CheckCircle, XCircle, AlertCircle,
   Database, Search, X, ChevronLeft, ChevronRight,
   FileText, FileSpreadsheet, Eye, Settings, LayoutDashboard, BarChart2, Shield,
-  Plus, Power, AlertTriangle, MapPin,
+  Plus, Power, AlertTriangle, MapPin, UserCheck,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,7 @@ import {
   apiGetRutasAreas,
   apiAsignarAreaTrabajador,
   apiAsignarAreaBulk,
+  apiGetRutasTrabajadores,
 } from '../api/gateway';
 import {
   exportRutasJornadasPDF,
@@ -1161,6 +1162,236 @@ function TabDashboard({ data }) {
   );
 }
 
+// ─── Tab: Trabajadores (solo superadmin) ─────────────────────────────────────
+
+function TabTrabajadores() {
+  const [trabajadores, setTrabajadores] = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [total,        setTotal]        = useState(0);
+
+  // Filtros — el backend soporta: id_area, id_ruta, con_ruta
+  const [idArea,   setIdArea]   = useState('');
+  const [idRuta,   setIdRuta]   = useState('');
+  const [conRuta,  setConRuta]  = useState(false); // solo trabajadores con ruta asignada
+
+  // Datos para los selects
+  const [areas, setAreas] = useState([]);
+  const [rutas, setRutas] = useState([]);
+
+  // Cargar áreas y rutas al montar
+  useEffect(() => {
+    apiGetRutasAreas()
+      .then(res => setAreas(res?.items ?? []))
+      .catch(() => setAreas([]));
+    apiGetRutasAdminRutas()
+      .then(res => setRutas(res?.rutas ?? res?.data ?? []))
+      .catch(() => setRutas([]));
+  }, []);
+
+  // Cargar trabajadores — el backend devuelve TODOS (sin paginación)
+  const fetchTrabajadores = useCallback(async ({ id_area, id_ruta, con_ruta } = {}) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await apiGetRutasTrabajadores({
+        id_area:  id_area  || undefined,
+        id_ruta:  id_ruta  || undefined,
+        con_ruta: con_ruta ? '1' : undefined,
+      });
+      if (res?.ok === false || res?.error) {
+        setError(res.error ?? res.message ?? 'Error al cargar trabajadores');
+        setTrabajadores([]); setTotal(0);
+        return;
+      }
+      // El backend devuelve { ok, total, items }
+      const items = res?.items ?? res?.trabajadores ?? res?.data ?? (Array.isArray(res) ? res : []);
+      setTrabajadores(items);
+      setTotal(res?.total ?? items.length);
+    } catch (e) { setError(e.message); setTrabajadores([]); setTotal(0); }
+    finally { setLoading(false); }
+  }, []);
+
+  // Recargar cuando cambian los filtros
+  useEffect(() => {
+    fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta });
+  }, [idArea, idRuta, conRuta, fetchTrabajadores]);
+
+  function handleLimpiar() {
+    setIdArea(''); setIdRuta(''); setConRuta(false);
+  }
+
+  const hayFiltros = idArea || idRuta || conRuta;
+
+  return (
+    <div className="space-y-6">
+      {/* Header con badge SA */}
+      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
+        <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+          <UserCheck size={18} className="text-blue-600" />
+        </div>
+        <div>
+          <p className="font-bold text-blue-800 text-sm">Directorio de Trabajadores</p>
+          <p className="text-xs text-blue-500 mt-0.5">Acceso restringido · Solo superadmin · Consulta de área y ruta asignada</p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-4">Filtros</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end">
+          {/* Área */}
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Área</label>
+            <select value={idArea} onChange={e => setIdArea(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Todas las áreas</option>
+              {areas.map(a => (
+                <option key={a.id_area} value={a.id_area}>{a.nombre} ({a.codigo})</option>
+              ))}
+            </select>
+          </div>
+          {/* Ruta */}
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Ruta</label>
+            <select value={idRuta} onChange={e => setIdRuta(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">Todas las rutas</option>
+              {rutas.map(r => (
+                <option key={r.id_ruta} value={r.id_ruta}>{r.nombre} ({r.codigo})</option>
+              ))}
+            </select>
+          </div>
+          {/* Solo con ruta asignada */}
+          <div className="flex items-center gap-3 pb-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={conRuta}
+                onChange={e => setConRuta(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-slate-600">Solo con ruta asignada</span>
+            </label>
+          </div>
+        </div>
+        {hayFiltros && (
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <button onClick={handleLimpiar} disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50">
+              <X size={14} /> Limpiar filtros
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+          <XCircle size={18} className="text-red-500 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-red-700 text-sm">Error al cargar trabajadores</p>
+            <p className="text-xs text-red-500 mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Tabla */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <p className="text-sm text-slate-500">
+            {loading
+              ? 'Cargando trabajadores...'
+              : total === 0
+                ? 'Sin resultados'
+                : `${desde}–${hasta} de ${total} trabajador${total !== 1 ? 'es' : ''}`
+            }
+          </p>
+          {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                {['DNI', 'Nombre completo', 'Área', 'Código área', 'Ruta', 'Estado área'].map(col => (
+                  <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading && trabajadores.length === 0 ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: `${55 + (j * 9) % 35}%` }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : trabajadores.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-14 text-center text-slate-400">
+                    <Users size={36} className="mx-auto mb-3 opacity-25" />
+                    <p className="text-sm font-medium">No se encontraron trabajadores</p>
+                    <p className="text-xs mt-1 text-slate-300">Ajusta los filtros o verifica la conexión con el backend</p>
+                  </td>
+                </tr>
+              ) : (
+                trabajadores.map((trab, i) => {
+                  const nombreCompleto = `${(trab.apellidos ?? '').toUpperCase()} ${trab.nombres ?? ''}`.trim() || '—';
+                  const nombreArea     = trab.area ?? trab.nombre_area ?? trab.area_nombre ?? null;
+                  const codigoArea     = trab.codigo_area ?? trab.area_codigo ?? null;
+                  const nombreRuta     = trab.ruta ?? trab.nombre_ruta ?? trab.ruta_nombre ?? null;
+                  const tieneArea      = nombreArea !== null;
+
+                  return (
+                    <tr key={trab.id_trabajador ?? trab.dni ?? i}
+                      className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
+                      <td className="px-4 py-3 font-mono text-slate-700 text-xs">{trab.dni ?? '—'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-800">{nombreCompleto}</td>
+                      <td className="px-4 py-3">
+                        {tieneArea
+                          ? <span className="text-sm text-slate-700">{nombreArea}</span>
+                          : <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Sin área</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        {codigoArea
+                          ? <span className="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-lg font-bold">{codigoArea}</span>
+                          : <span className="text-xs text-slate-300">—</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        {nombreRuta
+                          ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{nombreRuta}</span>
+                          : <span className="text-xs text-slate-400 italic">Sin ruta</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        {tieneArea
+                          ? <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">Con área</span>
+                          : <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-semibold">Sin área</span>
+                        }
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Total — el backend devuelve todos los resultados sin paginación */}
+        {!loading && total > 0 && (
+          <div className="px-6 py-3 border-t border-slate-100">
+            <p className="text-xs text-slate-400">{total} trabajador{total !== 1 ? 'es' : ''} encontrado{total !== 1 ? 's' : ''}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function RutasPage() {
@@ -1190,9 +1421,12 @@ export default function RutasPage() {
   }, []);
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard',       icon: <LayoutDashboard size={15} /> },
-    { id: 'reportes',  label: 'Reportes',         icon: <BarChart2 size={15} /> },
-    ...(isSuperadmin ? [{ id: 'admin', label: 'Administración', icon: <Shield size={15} />, badge: 'SA' }] : []),
+    { id: 'dashboard',    label: 'Dashboard',       icon: <LayoutDashboard size={15} /> },
+    { id: 'reportes',     label: 'Reportes',         icon: <BarChart2 size={15} /> },
+    ...(isSuperadmin ? [
+      { id: 'trabajadores', label: 'Trabajadores',   icon: <UserCheck size={15} />, badge: 'SA' },
+      { id: 'admin',        label: 'Administración', icon: <Shield size={15} />,    badge: 'SA' },
+    ] : []),
   ];
 
   return (
@@ -1245,6 +1479,9 @@ export default function RutasPage() {
 
         {/* Tab: Reportes siempre accesible */}
         {activeTab === 'reportes' && <TabReportesRutas />}
+
+        {/* Tab: Trabajadores solo para superadmin */}
+        {activeTab === 'trabajadores' && isSuperadmin && <TabTrabajadores />}
 
         {/* Tab: Admin siempre accesible para superadmin (gestiona su propio estado) */}
         {activeTab === 'admin' && isSuperadmin && <TabAdminRutas />}

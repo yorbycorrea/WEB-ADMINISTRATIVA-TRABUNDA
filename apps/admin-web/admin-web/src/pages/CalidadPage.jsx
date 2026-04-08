@@ -189,7 +189,7 @@ function TabDashboard({ data, loading, onRefresh }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Pesos Hoy"        value={pesosHoy.total}    color="emerald" sub="registros de peso" />
         <StatCard label="Temperatura Hoy"  value={tempHoy.total}     color="blue"    sub="registros de temp." />
-        <StatCard label="Organoléptica Hoy" value={orgHoy.total}     color="teal"    sub="registros organ." />
+        <StatCard label="Organoleptica Hoy" value={orgHoy.total}     color="teal"    sub="registros organ." />
         <StatCard label="Supervisores"     value={supervisores.length} color="amber" sub="activos en sistema" />
       </div>
 
@@ -415,7 +415,7 @@ function TabReportes() {
   const subTabs = [
     { id: 'pesos',        label: 'Pesos',         icon: <Scale size={15} /> },
     { id: 'temperatura',  label: 'Temperatura',    icon: <Thermometer size={15} /> },
-    { id: 'organoletica', label: 'Organoléptica',  icon: <ClipboardCheck size={15} /> },
+    { id: 'organoletica', label: 'Organoleptica',  icon: <ClipboardCheck size={15} /> },
   ];
 
   return (
@@ -473,7 +473,7 @@ function TabReportes() {
 
       {subTab === 'organoletica' && (
         <ReporteSubTab
-          tipo="organoléptica"
+          tipo="organoleptica"
           fetchFn={apiGetCalidadReportesOrganoletica}
           fetchDetalleFn={apiGetCalidadOrganoleticaDetalle}
           columns={['ID', 'Producto', 'Supervisor', 'Resultado', 'Fecha']}
