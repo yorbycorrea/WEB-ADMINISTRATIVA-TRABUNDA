@@ -617,7 +617,7 @@ app.get("/dashboard/calidad", verifyToken, requirePermission("calidad"), async (
       fetch(`${base}/health`).then(r => r.json()).catch(() => null),
       call("/pesos/reportes"),
       call("/temperatura"),
-      call("/organoléptica"),
+      call("/organol%C3%A9ptica"),
       call("/catalogos/supervisores"),
       call("/ocr/estado"),
     ]);
@@ -736,7 +736,7 @@ app.get("/dashboard/calidad/reportes/organoletica", verifyToken, requirePermissi
     const limit = req.query.limit || 25;
     const params = new URLSearchParams({ page, limit });
     if (req.query.fecha) params.set("fecha", req.query.fecha);
-    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica?${params}`);
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organol%C3%A9ptica?${params}`);
     res.json(data);
   } catch (err) {
     if (err.backendStatus) {
@@ -752,7 +752,7 @@ app.get("/dashboard/calidad/reportes/organoletica/:id", verifyToken, requirePerm
     return res.status(503).json({ configured: false });
   }
   try {
-    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica/${req.params.id}`);
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organol%C3%A9ptica/${req.params.id}`);
     res.json(data);
   } catch (err) {
     if (err.backendStatus) {
@@ -971,7 +971,7 @@ app.put("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSuperad
     return res.status(503).json({ configured: false });
   }
   try {
-    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica/${req.params.id}`, {
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organol%C3%A9ptica/${req.params.id}`, {
       method: "PUT",
       body: JSON.stringify(req.body),
     });
@@ -990,7 +990,7 @@ app.delete("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSupe
     return res.status(503).json({ configured: false });
   }
   try {
-    const data = await fetchService(getCalidadToken, "calidad", `${base}/organoléptica/${req.params.id}`, { method: "DELETE" });
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/organol%C3%A9ptica/${req.params.id}`, { method: "DELETE" });
     res.json(data);
   } catch (err) {
     if (err.backendStatus) {
