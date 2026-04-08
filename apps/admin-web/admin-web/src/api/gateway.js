@@ -164,11 +164,12 @@ export function apiAsignarAreaBulk(id_area, dnis) {
   });
 }
 
-// Listar trabajadores con área asignada (y opcionalmente con ruta)
+// Listar trabajadores con área asignada (y ruta del último scan)
 // Endpoint real del backend: GET /trabajadores/con-area
-// Respuesta: { ok, total, items: [{ dni, nombres, apellidos, cargo, id_area, area_codigo, area_nombre, id_ruta, ruta_codigo, ruta_nombre }] }
-export function apiGetRutasTrabajadores({ id_area, id_ruta, con_ruta } = {}) {
-  const params = new URLSearchParams();
+// Respuesta: { ok, total, items: [{ dni, nombres, apellidos, cargo, id_area, area_codigo, area_nombre, id_ruta, ruta_codigo, ruta_nombre, hora_scan }] }
+// hoy: '1' = ruta del scan de HOY (default) | '0' = último scan histórico
+export function apiGetRutasTrabajadores({ id_area, id_ruta, con_ruta, hoy = '1' } = {}) {
+  const params = new URLSearchParams({ hoy });
   if (id_area)  params.set('id_area',  id_area);
   if (id_ruta)  params.set('id_ruta',  id_ruta);
   if (con_ruta) params.set('con_ruta', con_ruta);

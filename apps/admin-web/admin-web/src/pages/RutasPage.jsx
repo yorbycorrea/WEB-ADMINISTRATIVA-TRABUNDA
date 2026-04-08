@@ -1170,10 +1170,11 @@ function TabTrabajadores() {
   const [error,        setError]        = useState(null);
   const [total,        setTotal]        = useState(0);
 
-  // Filtros — el backend soporta: id_area, id_ruta, con_ruta
+  // Filtros — el backend soporta: id_area, id_ruta, con_ruta, hoy
   const [idArea,   setIdArea]   = useState('');
   const [idRuta,   setIdRuta]   = useState('');
   const [conRuta,  setConRuta]  = useState(false); // solo trabajadores con ruta asignada
+  const [soloHoy,  setSoloHoy]  = useState(true);  // true=scan de HOY, false=histórico
 
   // Datos para los selects
   const [areas, setAreas] = useState([]);
@@ -1190,13 +1191,14 @@ function TabTrabajadores() {
   }, []);
 
   // Cargar trabajadores — el backend devuelve TODOS (sin paginación)
-  const fetchTrabajadores = useCallback(async ({ id_area, id_ruta, con_ruta } = {}) => {
+  const fetchTrabajadores = useCallback(async ({ id_area, id_ruta, con_ruta, hoy } = {}) => {
     setLoading(true); setError(null);
     try {
       const res = await apiGetRutasTrabajadores({
         id_area:  id_area  || undefined,
         id_ruta:  id_ruta  || undefined,
         con_ruta: con_ruta ? '1' : undefined,
+        hoy:      hoy ? '1' : '0',
       });
       if (res?.ok === false || res?.error) {
         setError(res.error ?? res.message ?? 'Error al cargar trabajadores');
@@ -1213,14 +1215,14 @@ function TabTrabajadores() {
 
   // Recargar cuando cambian los filtros
   useEffect(() => {
-    fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta });
-  }, [idArea, idRuta, conRuta, fetchTrabajadores]);
+    fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta, hoy: soloHoy });
+  }, [idArea, idRuta, conRuta, soloHoy, fetchTrabajadores]);
 
   function handleLimpiar() {
-    setIdArea(''); setIdRuta(''); setConRuta(false);
+    setIdArea(''); setIdRuta(''); setConRuta(false); setSoloHoy(true);
   }
 
-  const hayFiltros = idArea || idRuta || conRuta;
+  const hayFiltros = idArea || idRuta || conRuta || !soloHoy;
 
   return (
     <div className="space-y-6">
@@ -1261,8 +1263,8 @@ function TabTrabajadores() {
               ))}
             </select>
           </div>
-          {/* Solo con ruta asignada */}
-          <div className="flex items-center gap-3 pb-1">
+          {/* Checkboxes: con ruta + hoy/histórico */}
+          <div className="flex flex-col gap-2 pb-1">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -1271,6 +1273,15 @@ function TabTrabajadores() {
                 className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
               />
               <span className="text-sm font-medium text-slate-600">Solo con ruta asignada</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={soloHoy}
+                onChange={e => setSoloHoy(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-slate-600">Solo scans de hoy</span>
             </label>
           </div>
         </div>
@@ -1312,7 +1323,7 @@ function TabTrabajadores() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {['DNI', 'Nombre completo', 'Área', 'Código área', 'Ruta', 'Estado área'].map(col => (
+                {['DNI', 'Nombre completo', 'Cargo', 'Área', 'Ruta', 'Hora scan'].map(col => (
                   <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr>
@@ -1338,39 +1349,41 @@ function TabTrabajadores() {
                 </tr>
               ) : (
                 trabajadores.map((trab, i) => {
-                  const nombreCompleto = `${(trab.apellidos ?? '').toUpperCase()} ${trab.nombres ?? ''}`.trim() || '—';
-                  const nombreArea     = trab.area ?? trab.nombre_area ?? trab.area_nombre ?? null;
-                  const codigoArea     = trab.codigo_area ?? trab.area_codigo ?? null;
-                  const nombreRuta     = trab.ruta ?? trab.nombre_ruta ?? trab.ruta_nombre ?? null;
-                  const tieneArea      = nombreArea !== null;
+                  const nombreCompleto = `${(trab.apellidos ?? '').toUpperCase()}, ${trab.nombres ?? ''}`.trim() || '—';
+                  // Campos exactos que devuelve el backend
+                  const areaNombre = trab.area_nombre ?? '—';
+                  const areaCodigo = trab.area_codigo ?? null;
+                  const rutaNombre = trab.ruta_nombre ?? null;
+                  const rutaCodigo = trab.ruta_codigo ?? null;
+                  const horaScan   = trab.hora_scan   ?? null;
 
                   return (
-                    <tr key={trab.id_trabajador ?? trab.dni ?? i}
+                    <tr key={trab.dni ?? i}
                       className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
                       <td className="px-4 py-3 font-mono text-slate-700 text-xs">{trab.dni ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-800">{nombreCompleto}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{trab.cargo ?? '—'}</td>
                       <td className="px-4 py-3">
-                        {tieneArea
-                          ? <span className="text-sm text-slate-700">{nombreArea}</span>
-                          : <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Sin área</span>
-                        }
+                        <div className="flex items-center gap-1.5">
+                          {areaCodigo && (
+                            <span className="font-mono text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">{areaCodigo}</span>
+                          )}
+                          <span className="text-sm text-slate-700">{areaNombre}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        {codigoArea
-                          ? <span className="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-lg font-bold">{codigoArea}</span>
-                          : <span className="text-xs text-slate-300">—</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3">
-                        {nombreRuta
-                          ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{nombreRuta}</span>
+                        {rutaNombre
+                          ? <div className="flex items-center gap-1.5">
+                              {rutaCodigo && <span className="font-mono text-xs bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded font-bold">{rutaCodigo}</span>}
+                              <span className="text-xs text-blue-700 font-medium">{rutaNombre}</span>
+                            </div>
                           : <span className="text-xs text-slate-400 italic">Sin ruta</span>
                         }
                       </td>
                       <td className="px-4 py-3">
-                        {tieneArea
-                          ? <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold">Con área</span>
-                          : <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-semibold">Sin área</span>
+                        {horaScan
+                          ? <span className="font-mono text-sm font-bold text-slate-700">{horaScan}</span>
+                          : <span className="text-xs text-slate-300">—</span>
                         }
                       </td>
                     </tr>

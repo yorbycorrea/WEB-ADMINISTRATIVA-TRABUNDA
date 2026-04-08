@@ -1001,9 +1001,9 @@ app.delete("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSupe
 });
 
 
-// ─── ADMIN RUTAS: Listar trabajadores con área (y ruta opcional) ─────────────
+// ─── ADMIN RUTAS: Listar trabajadores con área (y ruta del último scan) ───────
 // Llama a GET /trabajadores/con-area en el backend de Rutas
-// Params: id_area, id_ruta, con_ruta (1 = solo los que tienen ruta asignada)
+// Params: id_area, id_ruta, con_ruta (1=solo con ruta), hoy (1=scan de hoy [default], 0=histórico)
 app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, async (req, res) => {
   const base = process.env.RUTAS_BACKEND_URL;
   if (!base || !process.env.RUTAS_ADMIN_USER) {
@@ -1014,6 +1014,9 @@ app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, a
     if (req.query.id_area)  params.set("id_area",  req.query.id_area);
     if (req.query.id_ruta)  params.set("id_ruta",  req.query.id_ruta);
     if (req.query.con_ruta) params.set("con_ruta", req.query.con_ruta);
+    // hoy=1 (default del backend): ruta del último scan de HOY
+    // hoy=0: ruta del último scan histórico
+    params.set("hoy", req.query.hoy ?? "1");
     const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/con-area?${params}`);
     res.json(data);
   } catch (err) {
