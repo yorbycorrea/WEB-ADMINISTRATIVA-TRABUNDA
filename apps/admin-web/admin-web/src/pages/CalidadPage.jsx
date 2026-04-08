@@ -146,8 +146,18 @@ function TabDashboard({ data, loading, onRefresh }) {
   if (data.configured === false) return <NotConfigured />;
 
   const health     = data.health ?? {};
-  const apiOk      = !!health.status || !!health.ok;
-  const dbOk       = health.database === 'ok' || health.db === 'ok' || health.db_status === 'ok';
+  const apiOk = health.status === 'ok' || health.status === 'online' || health.ok === true || !!health.status;
+
+  // Intenta detectar el estado de la BD en distintas estructuras posibles.
+  // Si no hay campo explícito pero la API responde OK, asumimos que la BD está bien.
+  const dbExplicit =
+    health.database === 'ok'        || health.database === 'connected'  ||
+    health.db       === 'ok'        || health.db       === 'connected'  ||
+    health.db_status === 'ok'       ||
+    health.services?.database === 'ok'  || health.services?.mysql === 'ok'   ||
+    health.mysql?.connected === true    || health.database?.status === 'ok'  ||
+    health.db?.status === 'ok';
+  const dbOk = dbExplicit || (apiOk && health.database !== false && health.db !== false && health.database !== 'error' && health.db !== 'error');
   const pesosHoy   = data.pesosHoy   ?? { total: 0, items: [] };
   const tempHoy    = data.temperaturaHoy  ?? { total: 0, items: [] };
   const orgHoy     = data.organoleticaHoy ?? { total: 0, items: [] };
