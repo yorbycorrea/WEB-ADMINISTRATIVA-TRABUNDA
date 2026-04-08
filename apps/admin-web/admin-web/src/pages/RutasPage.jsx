@@ -1201,7 +1201,8 @@ function TabTrabajadores() {
         hoy:      hoy ? '1' : '0',
       });
       if (res?.ok === false || res?.error) {
-        setError(res.error ?? res.message ?? 'Error al cargar trabajadores');
+        const raw = res.error ?? res.message ?? 'Error al cargar trabajadores';
+        setError(typeof raw === 'string' ? raw : (raw?.detail ?? raw?.message ?? JSON.stringify(raw)));
         setTrabajadores([]); setTotal(0);
         return;
       }
