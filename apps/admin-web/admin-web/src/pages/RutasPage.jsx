@@ -1302,7 +1302,7 @@ function TabTrabajadores() {
               ? 'Cargando trabajadores...'
               : total === 0
                 ? 'Sin resultados'
-                : `${desde}–${hasta} de ${total} trabajador${total !== 1 ? 'es' : ''}`
+                : `${total} trabajador${total !== 1 ? 'es' : ''}`
             }
           </p>
           {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
