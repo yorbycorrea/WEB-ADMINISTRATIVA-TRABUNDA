@@ -43,6 +43,7 @@ const ESTADO_BADGE = {
 };
 
 const LIMIT = 100;
+const WORKERS_PER_PAGE = 20;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1169,6 +1170,7 @@ function TabTrabajadores() {
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
   const [total,        setTotal]        = useState(0);
+  const [page,         setPage]         = useState(1);
 
   // Filtros — el backend soporta: id_area, id_ruta, con_ruta, hoy
   const [idArea,   setIdArea]   = useState('');
@@ -1219,11 +1221,28 @@ function TabTrabajadores() {
     fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta, hoy: soloHoy });
   }, [idArea, idRuta, conRuta, soloHoy, fetchTrabajadores]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [idArea, idRuta, conRuta, soloHoy]);
+
   function handleLimpiar() {
     setIdArea(''); setIdRuta(''); setConRuta(false); setSoloHoy(true);
   }
 
   const hayFiltros = idArea || idRuta || conRuta || !soloHoy;
+  const totalPages = Math.max(1, Math.ceil(trabajadores.length / WORKERS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * WORKERS_PER_PAGE;
+  const endIndex = startIndex + WORKERS_PER_PAGE;
+  const visibleTrabajadores = trabajadores.slice(startIndex, endIndex);
+  const visibleStart = total === 0 ? 0 : startIndex + 1;
+  const visibleEnd = total === 0 ? 0 : Math.min(startIndex + visibleTrabajadores.length, total);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   return (
     <div className="space-y-6">
@@ -1314,7 +1333,7 @@ function TabTrabajadores() {
               ? 'Cargando trabajadores...'
               : total === 0
                 ? 'Sin resultados'
-                : `${total} trabajador${total !== 1 ? 'es' : ''}`
+                : `${visibleStart}-${visibleEnd} de ${total} trabajador${total !== 1 ? 'es' : ''}`
             }
           </p>
           {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
@@ -1349,7 +1368,7 @@ function TabTrabajadores() {
                   </td>
                 </tr>
               ) : (
-                trabajadores.map((trab, i) => {
+                visibleTrabajadores.map((trab, i) => {
                   const nombreCompleto = `${(trab.apellidos ?? '').toUpperCase()}, ${trab.nombres ?? ''}`.trim() || '—';
                   // Campos exactos que devuelve el backend
                   const areaNombre = trab.area_nombre ?? '—';
@@ -1395,10 +1414,32 @@ function TabTrabajadores() {
           </table>
         </div>
 
-        {/* Total — el backend devuelve todos los resultados sin paginación */}
         {!loading && total > 0 && (
-          <div className="px-6 py-3 border-t border-slate-100">
-            <p className="text-xs text-slate-400">{total} trabajador{total !== 1 ? 'es' : ''} encontrado{total !== 1 ? 's' : ''}</p>
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap bg-slate-50">
+            <p className="text-xs text-slate-500">
+              {totalPages > 1
+                ? `Página ${safePage} de ${totalPages} · Mostrando ${visibleStart}-${visibleEnd} de ${total}`
+                : `${total} trabajador${total !== 1 ? 'es' : ''} encontrado${total !== 1 ? 's' : ''}`
+              }
+            </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white disabled:opacity-40 transition-all"
+                >
+                  <ChevronLeft size={14} /> Anterior
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-white disabled:opacity-40 transition-all"
+                >
+                  Siguiente <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
