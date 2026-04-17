@@ -44,19 +44,57 @@ const ESTADO_BADGE = {
 
 const LIMIT = 100;
 const WORKERS_PER_PAGE = 20;
+const TURNO_LABELS = {
+  1: 'Turno 1',
+  2: 'Turno 2',
+  3: 'Turno 3',
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtFechaCorta(val) {
   if (!val) return '—';
-  try { const [y, m, d] = String(val).split('-'); return `${d}/${m}/${y}`; }
-  catch { return String(val); }
+  const raw = String(val).trim();
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${d}/${m}/${y}`;
+  }
+  const slashMatch = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if (slashMatch) {
+    const [, y, m, d] = slashMatch;
+    return `${d}/${m}/${y}`;
+  }
+  const localMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (localMatch) return `${localMatch[1]}/${localMatch[2]}/${localMatch[3]}`;
+  try {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return `${String(parsed.getDate()).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
+    }
+  } catch {}
+  return raw;
 }
 
 function fmtHoraISO(val) {
   if (!val) return '—';
   try { return new Date(val).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }); }
   catch { return '—'; }
+}
+
+function getTurnoNombre(item) {
+  const nombre = item?.turno_nombre ?? item?.nombre_turno ?? item?.turno ?? item?.turno_label;
+  if (nombre) return nombre;
+  const idTurno = item?.id_turno ?? item?.turno_id;
+  return idTurno ? (TURNO_LABELS[idTurno] ?? `Turno ${idTurno}`) : '—';
+}
+
+function getRutaNombre(item, rutasById = {}) {
+  const nombre = item?.ruta_nombre ?? item?.nombre_ruta ?? item?.ruta ?? item?.ruta_label;
+  if (nombre) return nombre;
+  const idRuta = item?.id_ruta ?? item?.ruta_id;
+  if (!idRuta) return '—';
+  return rutasById[String(idRuta)]?.nombre ?? `Ruta ${idRuta}`;
 }
 
 // ─── UI compartida ────────────────────────────────────────────────────────────
@@ -155,9 +193,11 @@ function EstadoBadge({ estado }) {
 
 // ─── Modal detalle de jornada ─────────────────────────────────────────────────
 
-function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onExcel }) {
+function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onExcel, rutasById }) {
   const trabajadores = detalle?.items ?? [];
   const stats        = resumen?.resumen ?? null;
+  const turnoNombre  = getTurnoNombre(jornada);
+  const rutaNombre   = getRutaNombre(jornada, rutasById);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -199,8 +239,8 @@ function JornadaModal({ jornada, resumen, detalle, loading, onClose, onPDF, onEx
             <div className="p-6 border-b border-slate-100 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { label: 'ID Turno', value: jornada.id_turno ?? '—' },
-                  { label: 'ID Ruta',  value: jornada.id_ruta  ?? '—' },
+                  { label: 'Turno', value: turnoNombre },
+                  { label: 'Ruta',  value: rutaNombre },
                   { label: 'Empresa',  value: `#${jornada.id_empresa_transporte ?? '—'}` },
                   { label: 'Sesiones', value: stats?.sesiones_involucradas ?? '—' },
                 ].map(item => (
@@ -280,6 +320,7 @@ function TabReportesRutas() {
   const [filters, setFilters] = useState({ fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' });
   const [applied, setApplied] = useState({ fecha: today, id_turno: '', id_ruta: '', placa: '', estado: '' });
   const [jornadas, setJornadas] = useState([]);
+  const [rutas,    setRutas]    = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
   const [offset,   setOffset]   = useState(0);
@@ -305,6 +346,20 @@ function TabReportesRutas() {
     finally { setLoading(false); }
   }, []);
 
+  useEffect(() => {
+    apiGetRutasAdminRutas()
+      .then(res => setRutas(res?.rutas ?? res?.data ?? []))
+      .catch(() => setRutas([]));
+  }, []);
+
+  function enrichJornada(jornada) {
+    return {
+      ...jornada,
+      turno_nombre: jornada?.turno_nombre ?? jornada?.nombre_turno ?? getTurnoNombre(jornada),
+      ruta_nombre: jornada?.ruta_nombre ?? jornada?.nombre_ruta ?? rutasById[String(jornada?.id_ruta)]?.nombre,
+    };
+  }
+
   useEffect(() => { fetchReportes(applied, offset); }, [applied, offset, fetchReportes]);
 
   function handleBuscar() { setOffset(0); setApplied({ ...filters }); }
@@ -314,27 +369,31 @@ function TabReportesRutas() {
   }
 
   async function openModal(jornada) {
-    setModal({ jornada, resumen: null, detalle: null, loading: true });
+    const jornadaView = enrichJornada(jornada);
+    setModal({ jornada: jornadaView, resumen: null, detalle: null, loading: true });
     try {
       const [r, d] = await Promise.all([
         apiGetRutasJornadaResumen(jornada.id_jornada),
         apiGetRutasJornadaDetalle(jornada.id_jornada),
       ]);
-      setModal({ jornada, resumen: r, detalle: d, loading: false });
+      setModal({ jornada: jornadaView, resumen: r, detalle: d, loading: false });
     } catch { setModal(prev => ({ ...prev, loading: false })); }
   }
 
   async function quickExportPDF(j) {
+    const jornadaView = enrichJornada(j);
     const [r, d] = await Promise.all([apiGetRutasJornadaResumen(j.id_jornada), apiGetRutasJornadaDetalle(j.id_jornada)]);
-    exportRutasJornadaDetallePDF(j, r?.resumen ?? null, d?.items ?? []);
+    exportRutasJornadaDetallePDF(jornadaView, r?.resumen ?? null, d?.items ?? []);
   }
   async function quickExportExcel(j) {
+    const jornadaView = enrichJornada(j);
     const [r, d] = await Promise.all([apiGetRutasJornadaResumen(j.id_jornada), apiGetRutasJornadaDetalle(j.id_jornada)]);
-    exportRutasJornadaDetalleExcel(j, r?.resumen ?? null, d?.items ?? []);
+    exportRutasJornadaDetalleExcel(jornadaView, r?.resumen ?? null, d?.items ?? []);
   }
 
   const hasPrev     = offset > 0;
   const currentPage = Math.floor(offset / LIMIT) + 1;
+  const rutasById   = Object.fromEntries(rutas.map(r => [String(r.id_ruta), r]));
 
   return (
     <div className="space-y-6">
@@ -394,11 +453,11 @@ function TabReportesRutas() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-400 mr-1">Exportar lista:</span>
-            <button onClick={() => exportRutasJornadasPDF(jornadas, applied.fecha)} disabled={loading || jornadas.length === 0}
+            <button onClick={() => exportRutasJornadasPDF(jornadas.map(enrichJornada), applied.fecha)} disabled={loading || jornadas.length === 0}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-red-50 text-red-700 border border-red-200 rounded-xl hover:bg-red-100 transition-all disabled:opacity-40">
               <FileText size={14} /> PDF
             </button>
-            <button onClick={() => exportRutasJornadasExcel(jornadas, applied.fecha)} disabled={loading || jornadas.length === 0}
+            <button onClick={() => exportRutasJornadasExcel(jornadas.map(enrichJornada), applied.fecha)} disabled={loading || jornadas.length === 0}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-40">
               <FileSpreadsheet size={14} /> Excel
             </button>
@@ -428,7 +487,7 @@ function TabReportesRutas() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {['ID', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones', 'Acciones'].map(col => (
+                {['ID', 'Fecha', 'Turno', 'Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones', 'Acciones'].map(col => (
                   <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr>
@@ -457,8 +516,8 @@ function TabReportesRutas() {
                   <tr key={j.id_jornada} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0">
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">#{j.id_jornada}</td>
                     <td className="px-4 py-3 text-slate-700">{fmtFechaCorta(j.fecha)}</td>
-                    <td className="px-4 py-3 text-center text-slate-700">{j.id_turno ?? '—'}</td>
-                    <td className="px-4 py-3 text-center text-slate-700">{j.id_ruta ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{getTurnoNombre(j)}</td>
+                    <td className="px-4 py-3 text-slate-700">{getRutaNombre(j, rutasById)}</td>
                     <td className="px-4 py-3 font-mono font-semibold text-slate-800">{j.placa ?? '—'}</td>
                     <td className="px-4 py-3"><EstadoBadge estado={j.estado_actual} /></td>
                     <td className="px-4 py-3 text-center font-bold text-slate-800">{j.total_marcados ?? 0}</td>
@@ -496,6 +555,7 @@ function TabReportesRutas() {
       {modal && (
         <JornadaModal
           jornada={modal.jornada} resumen={modal.resumen} detalle={modal.detalle} loading={modal.loading}
+          rutasById={rutasById}
           onClose={() => setModal(null)}
           onPDF={() => exportRutasJornadaDetallePDF(modal.jornada, modal.resumen?.resumen ?? null, modal.detalle?.items ?? [])}
           onExcel={() => exportRutasJornadaDetalleExcel(modal.jornada, modal.resumen?.resumen ?? null, modal.detalle?.items ?? [])}

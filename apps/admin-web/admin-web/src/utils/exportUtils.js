@@ -35,6 +35,12 @@ const FORMATO_COD = {
   CONTEO_RAPIDO:  'COD-CR-01',
 };
 
+const TURNO_LABELS = {
+  1: 'Turno 1',
+  2: 'Turno 2',
+  3: 'Turno 3',
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtHora(val) {
@@ -46,10 +52,40 @@ function fmtHora(val) {
 
 function fmtFecha(val) {
   if (!val) return '';
+  const raw = String(val).trim();
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${d}/${m}/${y}`;
+  }
+  const slashMatch = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if (slashMatch) {
+    const [, y, m, d] = slashMatch;
+    return `${d}/${m}/${y}`;
+  }
+  const localMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (localMatch) return `${localMatch[1]}/${localMatch[2]}/${localMatch[3]}`;
   try {
-    const d = new Date(val);
-    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-  } catch { return String(val); }
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    }
+  } catch {}
+  return raw;
+}
+
+function getTurnoNombre(item) {
+  const nombre = item?.turno_nombre ?? item?.nombre_turno ?? item?.turno ?? item?.turno_label;
+  if (nombre) return nombre;
+  const idTurno = item?.id_turno ?? item?.turno_id;
+  return idTurno ? (TURNO_LABELS[idTurno] ?? `Turno ${idTurno}`) : '—';
+}
+
+function getRutaNombre(item) {
+  const nombre = item?.ruta_nombre ?? item?.nombre_ruta ?? item?.ruta ?? item?.ruta_label;
+  if (nombre) return nombre;
+  const idRuta = item?.id_ruta ?? item?.ruta_id;
+  return idRuta ? `Ruta ${idRuta}` : '—';
 }
 
 function fmtCol(key) {
@@ -447,12 +483,12 @@ export function exportRutasJornadasPDF(jornadas, fecha) {
   );
 
   autoTable(doc, {
-    head: [['ID', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones']],
+    head: [['ID', 'Fecha', 'Turno', 'Ruta', 'Placa', 'Estado', 'Marcados', 'Sesiones']],
     body: jornadas.map(j => [
       j.id_jornada,
-      j.fecha ?? '—',
-      j.id_turno ?? '—',
-      j.id_ruta  ?? '—',
+      fmtFecha(j.fecha),
+      getTurnoNombre(j),
+      getRutaNombre(j),
       j.placa    ?? '—',
       ESTADO_RUTAS_LABELS[j.estado_actual] ?? j.estado_actual ?? '—',
       j.total_marcados        ?? 0,
@@ -489,12 +525,12 @@ export function exportRutasJornadasPDF(jornadas, fecha) {
 export function exportRutasJornadasExcel(jornadas, fecha) {
   if (!jornadas.length) return;
 
-  const cabecera = ['ID Jornada', 'Fecha', 'ID Turno', 'ID Ruta', 'Placa', 'Estado', 'Estado Real', 'Marcados', 'Sesiones', 'Creado En'];
+  const cabecera = ['ID Jornada', 'Fecha', 'Turno', 'Ruta', 'Placa', 'Estado', 'Estado Real', 'Marcados', 'Sesiones', 'Creado En'];
   const filas = jornadas.map(j => [
     j.id_jornada,
-    j.fecha ?? '—',
-    j.id_turno ?? '—',
-    j.id_ruta  ?? '—',
+    fmtFecha(j.fecha),
+    getTurnoNombre(j),
+    getRutaNombre(j),
     j.placa    ?? '—',
     ESTADO_RUTAS_LABELS[j.estado_actual] ?? j.estado_actual ?? '—',
     j.estado_real ?? '—',
@@ -543,8 +579,8 @@ export function exportRutasJornadaDetallePDF(jornada, resumenData, trabajadores)
     body: [
       [
         { content: `Fecha: ${fmtFechaRutas(jornada?.fecha)}`, styles: { fontSize: 8 } },
-        { content: `ID Turno: ${jornada?.id_turno ?? '—'}`, styles: { fontSize: 8 } },
-        { content: `ID Ruta: ${jornada?.id_ruta ?? '—'}`, styles: { fontSize: 8 } },
+        { content: `Turno: ${getTurnoNombre(jornada)}`, styles: { fontSize: 8 } },
+        { content: `Ruta: ${getRutaNombre(jornada)}`, styles: { fontSize: 8 } },
       ],
       [
         { content: `Placa: ${jornada?.placa ?? '—'}`, styles: { fontSize: 8, fontStyle: 'bold' } },
@@ -619,8 +655,8 @@ export function exportRutasJornadaDetalleExcel(jornada, resumenData, trabajadore
     ['Campo',        'Valor'],
     ['ID Jornada',   jornada?.id_jornada ?? '—'],
     ['Fecha',        fmtFechaRutas(jornada?.fecha)],
-    ['ID Turno',     jornada?.id_turno ?? '—'],
-    ['ID Ruta',      jornada?.id_ruta  ?? '—'],
+    ['Turno',        getTurnoNombre(jornada)],
+    ['Ruta',         getRutaNombre(jornada)],
     ['Placa',        jornada?.placa    ?? '—'],
     ['Estado',       ESTADO_RUTAS_LABELS[jornada?.estado_actual] ?? jornada?.estado_actual ?? '—'],
     ['', ''],
