@@ -29,7 +29,7 @@ const FORMATO_TITULO = {
 };
 
 const FORMATO_COD = {
-  APOYO_HORAS:    'COD-AP-01',
+  APOYO_HORAS:    'TRABUNDA SAC -GG-JO-F-15',
   SANEAMIENTO:    'TRABUNDA SAC -GG-JO-F-10',
   TRABAJO_AVANCE: 'COD-TA-01',
   CONTEO_RAPIDO:  'COD-CR-01',
@@ -115,7 +115,7 @@ function encabezadoInstitucion(doc, cabecera) {
   const esSaneamiento = tipo === 'SANEAMIENTO';
   const bloqueCodigo = esSaneamiento
     ? `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`
-    : `Código: ${codigo}\nVersión: 02\nFecha: ${hoyStr}`;
+    : `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`;
 
   // Fila 1: empresa | título | código
   autoTable(doc, {
