@@ -30,10 +30,12 @@ const FORMATO_TITULO = {
 
 const FORMATO_COD = {
   APOYO_HORAS:    'COD-AP-01',
-  SANEAMIENTO:    'COD-SN-01',
+  SANEAMIENTO:    'COD-SAN-001',
   TRABAJO_AVANCE: 'COD-TA-01',
   CONTEO_RAPIDO:  'COD-CR-01',
 };
+
+const TOTAL_PAGES_EXP = '{total_pages_count_string}';
 
 const TURNO_LABELS = {
   1: 'Turno 1',
@@ -110,17 +112,21 @@ function encabezadoInstitucion(doc, cabecera) {
   const hoyStr  = fmtFecha(new Date().toISOString());
   const planillero = cabecera?.creado_por_nombre ?? '—';
   const turno      = cabecera?.turno ?? '—';
+  const esSaneamiento = tipo === 'SANEAMIENTO';
+  const bloqueCodigo = esSaneamiento
+    ? `Código del formato: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`
+    : `Código: ${codigo}\nVersión: 02\nFecha: ${hoyStr}`;
 
   // Fila 1: empresa | título | código
   autoTable(doc, {
     body: [[
       { content: 'TRABUNDA SAC', styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 10 } },
       { content: `FORMATO\n${titulo}`, styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 8 } },
-      { content: `Código: ${codigo}\nVersión: 02\nFecha: ${hoyStr}`, styles: { halign: 'left', valign: 'middle', fontSize: 7 } },
+      { content: bloqueCodigo, styles: { halign: 'left', valign: 'middle', fontSize: esSaneamiento ? 6.5 : 7, textColor: [0, 0, 0] } },
     ]],
     startY: 12,
     margin: { left: 14, right: 14 },
-    styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 3 },
+    styles: { lineColor: esSaneamiento ? [0, 0, 0] : [100, 116, 139], lineWidth: 0.3, cellPadding: esSaneamiento ? 1.6 : 3 },
     columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 50 } },
     theme: 'grid',
   });
@@ -203,6 +209,9 @@ function pdfLineas(cabecera, contenido, tipo) {
   });
 
   pieFirmas(doc, cabecera);
+  if (esSaneamiento && typeof doc.putTotalPages === 'function') {
+    doc.putTotalPages(TOTAL_PAGES_EXP);
+  }
   doc.save(`trabunda-reporte-${cabecera.id}-${cabecera.tipo_reporte}.pdf`);
 }
 
