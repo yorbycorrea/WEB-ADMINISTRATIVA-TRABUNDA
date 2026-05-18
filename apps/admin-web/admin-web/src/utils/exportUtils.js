@@ -334,12 +334,16 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
         Number(l.horas) || 0,
       ]);
 
-      
+      const hoja = XLSX.utils.aoa_to_sheet([
+       
+        head,
+        ...rows,
+      ]);
 
       hoja['!cols'] = [8, 14, 38, 16, 18, 10].map(wch => ({ wch }));
-      hoja['!autofilter'] = { ref: `A7:F${rows.length + 7}` };
+      hoja['!autofilter'] = { ref: `A1:F${rows.length + 1}` };
 
-      for (let r = 8; r <= rows.length + 7; r++) {
+      for (let r = 2; r <= rows.length + 1; r++) {
         const cell = hoja[`F${r}`];
         if (cell) cell.z = '0.00';
       }
