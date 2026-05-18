@@ -318,25 +318,46 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
 
   const libro = XLSX.utils.book_new();
 
-  // ── Hoja de cabecera (común a todos los tipos) ──
-  const infoCab = [
-    ['Campo', 'Valor'],
-    ['ID',          cabecera.id],
-    ['Tipo',        TIPO_LABELS[tipo] ?? tipo],
-    ['Fecha',       fmtFecha(cabecera.fecha)],
-    ['Turno',       cabecera.turno ?? '—'],
-    ['Estado',      cabecera.estado ?? '—'],
-    ['Planillero',  cabecera.creado_por_nombre ?? '—'],
-    ['Observaciones', cabecera.observaciones ?? '—'],
-  ];
-  const hojaCab = XLSX.utils.aoa_to_sheet(infoCab);
-  hojaCab['!cols'] = [{ wch: 18 }, { wch: 36 }];
-  XLSX.utils.book_append_sheet(libro, hojaCab, 'Cabecera');
-
   // ── Hojas de contenido según tipo ──
   if (tipo === 'APOYO_HORAS' || tipo === 'SANEAMIENTO') {
     const lineas = contenido?.items ?? [];
     const esSaneamiento = tipo === 'SANEAMIENTO';
+
+    if (esSaneamiento) {
+      const head = ['ITEM', 'CÓDIGO', 'NOMBRE', 'COD. ACTIVIDAD', 'ACTIVIDAD', 'CVSE'];
+      const rows = lineas.map((l, i) => [
+        i + 1,
+        l.trabajador_codigo ?? '',
+        '',
+        '',
+        '',
+        Number(l.horas) || 0,
+      ]);
+
+      const hoja = XLSX.utils.aoa_to_sheet([
+        ['Documento:', cabecera.documento ?? cabecera.codigo_documento ?? ''],
+        ['Planilla:', cabecera.planilla ?? ''],
+        ['Periodo Planill:', cabecera.periodo_planilla ?? cabecera.periodo ?? ''],
+        ['Responsable:', cabecera.responsable ?? cabecera.creado_por_nombre ?? ''],
+        ['Grupo de Trab:', cabecera.grupo_trabajo ?? cabecera.turno ?? ''],
+        [],
+        head,
+        ...rows,
+      ]);
+
+      hoja['!cols'] = [8, 14, 38, 16, 18, 10].map(wch => ({ wch }));
+      hoja['!autofilter'] = { ref: `A7:F${rows.length + 7}` };
+
+      for (let r = 8; r <= rows.length + 7; r++) {
+        const cell = hoja[`F${r}`];
+        if (cell) cell.z = '0.00';
+      }
+
+      XLSX.utils.book_append_sheet(libro, hoja, 'Saneamiento');
+      XLSX.writeFile(libro, `trabunda-reporte-${cabecera.id}-saneamiento.xlsx`);
+      return;
+    }
+
     const ultimaCol = esSaneamiento ? 'Labores Realizadas' : 'Área';
     const head = ['N°', 'Código', 'Apellidos y Nombres', 'H. Inicio', 'H. Fin', 'Total Hrs', ultimaCol];
     const rows = lineas.map((l, i) => [
