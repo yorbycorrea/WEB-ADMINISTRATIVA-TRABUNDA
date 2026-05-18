@@ -114,7 +114,7 @@ function encabezadoInstitucion(doc, cabecera) {
   const turno      = cabecera?.turno ?? '—';
   const esSaneamiento = tipo === 'SANEAMIENTO';
   const bloqueCodigo = esSaneamiento
-    ? `Código del formato: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`
+    ? `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`
     : `Código: ${codigo}\nVersión: 02\nFecha: ${hoyStr}`;
 
   // Fila 1: empresa | título | código
