@@ -334,16 +334,7 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
         Number(l.horas) || 0,
       ]);
 
-      const hoja = XLSX.utils.aoa_to_sheet([
-        ['Documento:', cabecera.documento ?? cabecera.codigo_documento ?? ''],
-        ['Planilla:', cabecera.planilla ?? ''],
-        ['Periodo Planill:', cabecera.periodo_planilla ?? cabecera.periodo ?? ''],
-        ['Responsable:', cabecera.responsable ?? cabecera.creado_por_nombre ?? ''],
-        ['Grupo de Trab:', cabecera.grupo_trabajo ?? cabecera.turno ?? ''],
-        [],
-        head,
-        ...rows,
-      ]);
+      
 
       hoja['!cols'] = [8, 14, 38, 16, 18, 10].map(wch => ({ wch }));
       hoja['!autofilter'] = { ref: `A7:F${rows.length + 7}` };
