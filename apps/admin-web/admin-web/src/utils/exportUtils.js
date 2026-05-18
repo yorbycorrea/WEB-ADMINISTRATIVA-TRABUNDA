@@ -209,7 +209,7 @@ function pdfLineas(cabecera, contenido, tipo) {
   });
 
   pieFirmas(doc, cabecera);
-  if (esSaneamiento && typeof doc.putTotalPages === 'function') {
+  if (typeof doc.putTotalPages === 'function') {
     doc.putTotalPages(TOTAL_PAGES_EXP);
   }
   doc.save(`trabunda-reporte-${cabecera.id}-${cabecera.tipo_reporte}.pdf`);
