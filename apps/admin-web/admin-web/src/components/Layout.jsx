@@ -1,7 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Activity, Settings,
-  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical
+  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical, Moon, Sun
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -44,6 +45,13 @@ const ALL_NAV_ITEMS = [
 
 export default function Layout({ children, title, subtitle }) {
   const { user, logout, hasPermission } = useAuth();
+  const [theme, setTheme] = useState(() => localStorage.getItem('admin-theme') || 'light');
+  const isDark = theme === 'dark';
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+    localStorage.setItem('admin-theme', theme);
+  }, [isDark, theme]);
 
   // Filtramos solo los ítems que el usuario puede ver
   const navItems = ALL_NAV_ITEMS.filter(item =>
@@ -58,7 +66,7 @@ export default function Layout({ children, title, subtitle }) {
   }
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC] text-slate-900">
+    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 transition-colors duration-200">
 
       {/* ── Sidebar ────────────────────────────────────────────────────── */}
       <aside className="w-64 bg-[#0F172A] p-6 flex flex-col flex-shrink-0">
@@ -127,8 +135,19 @@ export default function Layout({ children, title, subtitle }) {
             <h1 className="text-2xl font-bold text-slate-800">{title}</h1>
             {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
           </div>
-          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 font-bold text-sm uppercase">
-            {user?.username?.slice(0, 2) ?? 'AD'}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center"
+              title={isDark ? 'Usar fondo normal' : 'Usar fondo noche'}
+              aria-label={isDark ? 'Usar fondo normal' : 'Usar fondo noche'}
+            >
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 font-bold text-sm uppercase">
+              {user?.username?.slice(0, 2) ?? 'AD'}
+            </div>
           </div>
         </header>
 
