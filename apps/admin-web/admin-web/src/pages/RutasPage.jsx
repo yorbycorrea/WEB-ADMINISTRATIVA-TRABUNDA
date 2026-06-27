@@ -26,6 +26,7 @@ import {
   exportRutasJornadasExcel,
   exportRutasJornadaDetallePDF,
   exportRutasJornadaDetalleExcel,
+  exportRutasTrabajadoresExcel,
 } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -1291,6 +1292,44 @@ function TabTrabajadores() {
     setIdArea(''); setIdRuta(''); setConRuta(false); setSoloHoy(true);
   }
 
+  const [exporting, setExporting] = useState(false);
+
+  // Trae TODOS los trabajadores (en bloques de 100) y genera el Excel.
+  // No usamos el estado `trabajadores` porque solo tiene la página actual (20).
+  async function handleExportExcel() {
+    setExporting(true); setError(null);
+    try {
+      const PER = 100; // tope que acepta el backend
+      let all = [];
+      let off = 0;
+      let total = Infinity;
+      while (all.length < total) {
+        const res = await apiGetRutasTrabajadores({
+          id_area:  idArea  || undefined,
+          id_ruta:  idRuta  || undefined,
+          con_ruta: conRuta ? '1' : undefined,
+          hoy:      soloHoy ? '1' : '0',
+          limit:    PER,
+          offset:   off,
+        });
+        if (res?.ok === false || res?.error) throw new Error(res.error ?? 'Error al exportar');
+        const items = res?.items ?? [];
+        total = res?.total ?? items.length;
+        all = all.concat(items);
+        if (items.length < PER) break; // ya no hay más
+        off += PER;
+      }
+      if (all.length === 0) { setError('No hay trabajadores para exportar'); return; }
+      exportRutasTrabajadoresExcel(all, {
+        soloHoy,
+        conRuta,
+        areaLabel: idArea ? (areas.find(a => String(a.id_area) === String(idArea))?.nombre ?? `#${idArea}`) : 'Todas',
+        rutaLabel: idRuta ? (rutas.find(r => String(r.id_ruta) === String(idRuta))?.nombre ?? `#${idRuta}`) : 'Todas',
+      });
+    } catch (e) { setError(e.message); }
+    finally { setExporting(false); }
+  }
+
   const hayFiltros = idArea || idRuta || conRuta || !soloHoy;
   const totalPages = Math.max(1, Math.ceil(total / WORKERS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
@@ -1396,7 +1435,16 @@ function TabTrabajadores() {
                 : `${visibleStart}-${visibleEnd} de ${total} trabajador${total !== 1 ? 'es' : ''}`
             }
           </p>
-          {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
+          <div className="flex items-center gap-3">
+            {loading && <RefreshCw size={14} className="animate-spin text-blue-500" />}
+            <button onClick={handleExportExcel} disabled={exporting || loading || total === 0}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-40">
+              {exporting
+                ? <><RefreshCw size={14} className="animate-spin" /> Exportando...</>
+                : <><FileSpreadsheet size={14} /> Exportar Excel</>
+              }
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

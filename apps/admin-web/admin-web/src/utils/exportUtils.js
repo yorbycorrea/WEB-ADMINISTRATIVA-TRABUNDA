@@ -714,6 +714,41 @@ export function exportRutasJornadaDetalleExcel(jornada, resumenData, trabajadore
   XLSX.writeFile(libro, `rutas-jornada-${jornada?.id_jornada ?? 'x'}-${jornada?.fecha ?? 'sin-fecha'}.xlsx`);
 }
 
+// ─── Excel: directorio de trabajadores (con área y ruta) ─────────────────────
+export function exportRutasTrabajadoresExcel(trabajadores, meta = {}) {
+  const libro = XLSX.utils.book_new();
+
+  const cab = ['N°', 'DNI', 'Apellidos', 'Nombres', 'Cargo', 'Cód. Área', 'Área', 'Cód. Ruta', 'Ruta', 'Hora Scan'];
+  const filas = (trabajadores ?? []).map((t, i) => [
+    i + 1,
+    t.dni          ?? '—',
+    t.apellidos    ?? '—',
+    t.nombres      ?? '—',
+    t.cargo        ?? '—',
+    t.area_codigo  ?? '—',
+    t.area_nombre  ?? '—',
+    t.ruta_codigo  ?? '',
+    t.ruta_nombre  ?? 'Sin ruta',
+    t.hora_scan    ?? '—',
+  ]);
+  const hoja = XLSX.utils.aoa_to_sheet([cab, ...filas]);
+  hoja['!cols'] = [5, 12, 24, 20, 26, 10, 22, 10, 22, 12].map(wch => ({ wch }));
+  XLSX.utils.book_append_sheet(libro, hoja, 'Trabajadores');
+
+  // Hoja info — qué filtros se aplicaron
+  XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+    ['Proyecto',  'Rutas Trabunda'],
+    ['Scans',     meta.soloHoy ? 'Solo de hoy' : 'Histórico'],
+    ['Área',      meta.areaLabel  ?? 'Todas'],
+    ['Ruta',      meta.rutaLabel  ?? 'Todas'],
+    ['Solo con ruta', meta.conRuta ? 'Sí' : 'No'],
+    ['Total',     (trabajadores ?? []).length],
+    ['Generado',  new Date().toLocaleString('es-ES')],
+  ]), 'Info');
+
+  XLSX.writeFile(libro, `rutas-trabajadores-${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
 // ─── Excel lista completa ─────────────────────────────────────────────────────
 export function exportToExcel(reportes, fecha, tipo) {
   if (!reportes.length) return;
