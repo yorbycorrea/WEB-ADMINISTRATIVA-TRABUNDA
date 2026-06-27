@@ -1253,7 +1253,7 @@ function TabTrabajadores() {
   }, []);
 
   // Cargar trabajadores — el backend devuelve TODOS (sin paginación)
-  const fetchTrabajadores = useCallback(async ({ id_area, id_ruta, con_ruta, hoy } = {}) => {
+  const fetchTrabajadores = useCallback(async ({ id_area, id_ruta, con_ruta, hoy, page = 1 } = {}) => {
     setLoading(true); setError(null);
     try {
       const res = await apiGetRutasTrabajadores({
@@ -1294,11 +1294,9 @@ function TabTrabajadores() {
   const hayFiltros = idArea || idRuta || conRuta || !soloHoy;
   const totalPages = Math.max(1, Math.ceil(total / WORKERS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
-  const startIndex = (safePage - 1) * WORKERS_PER_PAGE;
-  const endIndex = startIndex + WORKERS_PER_PAGE;
-  const visibleTrabajadores = trabajadores.slice(startIndex, endIndex);
+  const startIndex   = (safePage - 1) * WORKERS_PER_PAGE;
   const visibleStart = total === 0 ? 0 : startIndex + 1;
-  const visibleEnd = total === 0 ? 0 : Math.min(startIndex + visibleTrabajadores.length, total);
+  const visibleEnd   = total === 0 ? 0 : startIndex + trabajadores.length;
 
   useEffect(() => {
     if (page > totalPages) {
