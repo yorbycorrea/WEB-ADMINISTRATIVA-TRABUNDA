@@ -1017,6 +1017,8 @@ app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, a
     // hoy=1 (default del backend): ruta del último scan de HOY
     // hoy=0: ruta del último scan histórico
     params.set("hoy", req.query.hoy ?? "1");
+    params.set("limit", req.query.limit ?? "20");
+    params.set("offset", req.query.offset ?? "0");
     const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/con-area?${params}`);
     res.json(data);
   } catch (err) {

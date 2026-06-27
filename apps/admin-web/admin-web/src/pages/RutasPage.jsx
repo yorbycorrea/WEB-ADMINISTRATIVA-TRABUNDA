@@ -1261,6 +1261,8 @@ function TabTrabajadores() {
         id_ruta:  id_ruta  || undefined,
         con_ruta: con_ruta ? '1' : undefined,
         hoy:      hoy ? '1' : '0',
+        limit: WORKERS_PER_PAGE,
+        offset: (page - 1) * WORKERS_PER_PAGE,
       });
       if (res?.ok === false || res?.error) {
         const raw = res.error ?? res.message ?? 'Error al cargar trabajadores';
@@ -1278,8 +1280,8 @@ function TabTrabajadores() {
 
   // Recargar cuando cambian los filtros
   useEffect(() => {
-    fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta, hoy: soloHoy });
-  }, [idArea, idRuta, conRuta, soloHoy, fetchTrabajadores]);
+    fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta, hoy: soloHoy, page });
+  }, [idArea, idRuta, conRuta, soloHoy, page, fetchTrabajadores]);
 
   useEffect(() => {
     setPage(1);
@@ -1290,7 +1292,7 @@ function TabTrabajadores() {
   }
 
   const hayFiltros = idArea || idRuta || conRuta || !soloHoy;
-  const totalPages = Math.max(1, Math.ceil(trabajadores.length / WORKERS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(total / WORKERS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * WORKERS_PER_PAGE;
   const endIndex = startIndex + WORKERS_PER_PAGE;
@@ -1428,7 +1430,7 @@ function TabTrabajadores() {
                   </td>
                 </tr>
               ) : (
-                visibleTrabajadores.map((trab, i) => {
+                trabajadores.map((trab, i) => {
                   const nombreCompleto = `${(trab.apellidos ?? '').toUpperCase()}, ${trab.nombres ?? ''}`.trim() || '—';
                   // Campos exactos que devuelve el backend
                   const areaNombre = trab.area_nombre ?? '—';
