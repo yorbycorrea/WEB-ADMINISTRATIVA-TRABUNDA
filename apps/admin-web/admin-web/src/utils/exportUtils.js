@@ -35,6 +35,23 @@ const FORMATO_COD = {
   CONTEO_RAPIDO:  'COD-CR-01',
 };
 
+// Configuración fiel al formato físico original (por tipo de reporte).
+// Solo los tipos aquí definidos usan este encabezado/pie especializado;
+// el resto mantiene el comportamiento genérico previo.
+const FORMATO_META = {
+  APOYO_HORAS: {
+    titulo:        'PERSONAL POR HORAS (APOYOS)',
+    codigoLabel:   'Código del formato',
+    codigo:        'COD-AP-01',
+    version:       '02',
+    fechaEmision:  '01/01/2026',
+    mostrarPagina: false,
+    ultimaCol:     'AREA DE APOYO',
+    firmas:        ['PLANILLERO', 'PRODUCCIÓN', 'JEFE DE TURNO'],
+    firmaCentral:  'GERENTE DE OPERACIONES',
+  },
+};
+
 const TOTAL_PAGES_EXP = '{total_pages_count_string}';
 
 const TURNO_LABELS = {
@@ -106,15 +123,15 @@ function fmtValor(val) {
 // ─── Encabezado institucional (usando autoTable para evitar dibujo manual) ───
 function encabezadoInstitucion(doc, cabecera) {
   const tipo    = cabecera?.tipo_reporte ?? '';
-  const titulo  = FORMATO_TITULO[tipo] ?? 'REPORTE';
-  const codigo  = FORMATO_COD[tipo]    ?? 'COD-00-01';
+  const meta    = FORMATO_META[tipo] ?? null;
+  const titulo  = meta?.titulo ?? FORMATO_TITULO[tipo] ?? 'REPORTE';
+  const codigo  = meta?.codigo ?? FORMATO_COD[tipo]    ?? 'COD-00-01';
   const fecha   = fmtFecha(cabecera?.fecha);
-  const hoyStr  = fmtFecha(new Date().toISOString());
   const planillero = cabecera?.creado_por_nombre ?? '—';
   const turno      = cabecera?.turno ?? '—';
   const esSaneamiento = tipo === 'SANEAMIENTO';
-  const bloqueCodigo = esSaneamiento
-    ? `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`
+  const bloqueCodigo = meta
+    ? `${meta.codigoLabel}: ${codigo}\nVersión: ${meta.version}\nFecha emisión:${meta.fechaEmision}${meta.mostrarPagina ? `\nPágina: 1 de ${TOTAL_PAGES_EXP}` : ''}`
     : `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`;
 
   // Fila 1: empresa | título | código
@@ -131,38 +148,79 @@ function encabezadoInstitucion(doc, cabecera) {
     theme: 'grid',
   });
 
-  // Fila 2: planillero | turno | fecha
-  autoTable(doc, {
-    body: [[
-      { content: `Planillero: ${planillero}`, styles: { fontStyle: 'normal', fontSize: 8 } },
-      { content: `Turno: ${turno}`, styles: { fontStyle: 'normal', fontSize: 8 } },
-      { content: `Fecha: ${fecha}`, styles: { fontStyle: 'normal', fontSize: 8, halign: 'right' } },
-    ]],
-    startY: doc.lastAutoTable.finalY,
-    margin: { left: 14, right: 14 },
-    styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 2 },
-    theme: 'grid',
-  });
+  // Fila 2: planillero/turno | fecha  (formato fiel al original)
+  if (meta) {
+    autoTable(doc, {
+      body: [[
+        { content: `Planillero: ${planillero}\nTurno: ${turno}`, styles: { fontStyle: 'normal', fontSize: 8, valign: 'top' } },
+        { content: `Fecha: ${fecha}`, styles: { fontStyle: 'normal', fontSize: 8, halign: 'right', valign: 'top' } },
+      ]],
+      startY: doc.lastAutoTable.finalY,
+      margin: { left: 14, right: 14 },
+      styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 2 },
+      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 50 } },
+      theme: 'grid',
+    });
+  } else {
+    autoTable(doc, {
+      body: [[
+        { content: `Planillero: ${planillero}`, styles: { fontStyle: 'normal', fontSize: 8 } },
+        { content: `Turno: ${turno}`, styles: { fontStyle: 'normal', fontSize: 8 } },
+        { content: `Fecha: ${fecha}`, styles: { fontStyle: 'normal', fontSize: 8, halign: 'right' } },
+      ]],
+      startY: doc.lastAutoTable.finalY,
+      margin: { left: 14, right: 14 },
+      styles: { lineColor: [100, 116, 139], lineWidth: 0.3, cellPadding: 2 },
+      theme: 'grid',
+    });
+  }
 
   return doc.lastAutoTable.finalY + 2;
 }
 
 // ─── Pie de firmas ────────────────────────────────────────────────────────────
-function pieFirmas(doc, cabecera) {
+function pieFirmas(doc, cabecera, startY) {
+  const tipo = cabecera?.tipo_reporte ?? '';
+  const meta = FORMATO_META[tipo] ?? null;
   const planillero = (cabecera?.creado_por_nombre ?? '').toUpperCase();
-  let y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 230;
+  let y = startY != null ? startY : (doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 230);
 
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
   doc.text(`PERSONA QUE ELABORÓ EL INFORME: ${planillero}`, 14, y);
 
-  y += 18;
   doc.setLineWidth(0.4);
   doc.setDrawColor(30, 41, 59);
+
+  // Formato fiel: fila de firmas + una firma central debajo
+  if (meta?.firmas) {
+    y += 22;
+    const cols = [
+      { x0: 14,  x1: 66,  cx: 40  },
+      { x0: 79,  x1: 131, cx: 105 },
+      { x0: 144, x1: 196, cx: 170 },
+    ];
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    meta.firmas.forEach((f, i) => {
+      const c = cols[i] ?? cols[cols.length - 1];
+      doc.line(c.x0, y, c.x1, y);
+      const label = f === 'PLANILLERO' ? `PLANILLERO: ${planillero}` : f;
+      doc.text(label, c.cx, y + 5, { align: 'center' });
+    });
+    if (meta.firmaCentral) {
+      const cy = y + 22;
+      doc.line(79, cy, 131, cy);
+      doc.text(meta.firmaCentral, 105, cy + 5, { align: 'center' });
+    }
+    return;
+  }
+
+  // Comportamiento genérico previo (2 firmas)
+  y += 18;
   doc.line(14, y, 84, y);
   doc.line(126, y, 196, y);
-
   doc.setFontSize(8);
   doc.text(`PLANILLERO: ${planillero}`, 49, y + 5, { align: 'center' });
   doc.text('PRODUCCIÓN', 161, y + 5, { align: 'center' });
@@ -173,14 +231,17 @@ function pdfLineas(cabecera, contenido, tipo) {
   const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const lineas = contenido?.items ?? [];
   const esSaneamiento = tipo === 'SANEAMIENTO';
-  const ultimaColHeader = esSaneamiento ? 'LABORES REALIZADAS' : 'ÁREA';
+  const meta   = FORMATO_META[tipo] ?? null;
+  const ultimaColHeader = meta?.ultimaCol ?? (esSaneamiento ? 'LABORES REALIZADAS' : 'ÁREA');
+  const hIni = meta ? 'H.Ini' : 'H. Ini';
+  const hFin = meta ? 'H.Fin' : 'H. Fin';
 
   encabezadoInstitucion(doc, cabecera);
 
   const startY = doc.lastAutoTable.finalY + 2;
 
   autoTable(doc, {
-    head: [['N°', 'CÓDIGO', 'APELLIDOS Y NOMBRES', 'H. Ini', 'H. Fin', 'Tot. Hrs', ultimaColHeader]],
+    head: [['N°', 'CÓDIGO', 'APELLIDOS Y NOMBRES', hIni, hFin, 'Tot. Hrs', ultimaColHeader]],
     body: lineas.map((l, i) => [
       i + 1,
       l.trabajador_codigo ?? '—',
@@ -194,7 +255,7 @@ function pdfLineas(cabecera, contenido, tipo) {
     ]),
     startY,
     margin: { left: 14, right: 14 },
-    styles:     { fontSize: 8, cellPadding: 2, lineColor: [100, 116, 139], lineWidth: 0.2 },
+    styles:     { fontSize: 8, cellPadding: meta ? 1.4 : 2, lineColor: [100, 116, 139], lineWidth: 0.2 },
     headStyles: { fillColor: [255, 255, 255], textColor: [30, 41, 59], fontStyle: 'bold', lineWidth: 0.3, halign: 'center' },
     columnStyles: {
       0: { cellWidth: 8,  halign: 'center' },
@@ -208,23 +269,21 @@ function pdfLineas(cabecera, contenido, tipo) {
     theme: 'grid',
   });
 
-  // Observaciones del reporte (si las hay)
+  // Observaciones del reporte (encabezado + lista, sin recuadro — fiel al original)
+  let yFin = doc.lastAutoTable.finalY;
   const observaciones = String(cabecera?.observaciones ?? '').trim();
   if (observaciones) {
-    autoTable(doc, {
-      body: [[
-        { content: 'OBSERVACIONES', styles: { fontStyle: 'bold', fontSize: 8, valign: 'top' } },
-        { content: observaciones, styles: { fontSize: 8, valign: 'top' } },
-      ]],
-      startY: doc.lastAutoTable.finalY + 3,
-      margin: { left: 14, right: 14 },
-      styles: { lineColor: [100, 116, 139], lineWidth: 0.2, cellPadding: 2 },
-      columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 'auto' } },
-      theme: 'grid',
-    });
+    let oy = yFin + 6;
+    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 41, 59);
+    doc.text('OBSERVACIONES', 14, oy);
+    oy += 4.5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    const obsLines = doc.splitTextToSize(observaciones, 182);
+    doc.text(obsLines, 14, oy);
+    yFin = oy + obsLines.length * 3.4;
   }
 
-  pieFirmas(doc, cabecera);
+  pieFirmas(doc, cabecera, yFin + 10);
   if (typeof doc.putTotalPages === 'function') {
     doc.putTotalPages(TOTAL_PAGES_EXP);
   }
