@@ -208,6 +208,22 @@ function pdfLineas(cabecera, contenido, tipo) {
     theme: 'grid',
   });
 
+  // Observaciones del reporte (si las hay)
+  const observaciones = String(cabecera?.observaciones ?? '').trim();
+  if (observaciones) {
+    autoTable(doc, {
+      body: [[
+        { content: 'OBSERVACIONES', styles: { fontStyle: 'bold', fontSize: 8, valign: 'top' } },
+        { content: observaciones, styles: { fontSize: 8, valign: 'top' } },
+      ]],
+      startY: doc.lastAutoTable.finalY + 3,
+      margin: { left: 14, right: 14 },
+      styles: { lineColor: [100, 116, 139], lineWidth: 0.2, cellPadding: 2 },
+      columnStyles: { 0: { cellWidth: 40 }, 1: { cellWidth: 'auto' } },
+      theme: 'grid',
+    });
+  }
+
   pieFirmas(doc, cabecera);
   if (typeof doc.putTotalPages === 'function') {
     doc.putTotalPages(TOTAL_PAGES_EXP);
@@ -348,6 +364,11 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
         if (cell) cell.z = '0.00';
       }
 
+      const obsSan = String(cabecera?.observaciones ?? '').trim();
+      if (obsSan) {
+        XLSX.utils.sheet_add_aoa(hoja, [[], ['OBSERVACIONES:', obsSan]], { origin: -1 });
+      }
+
       XLSX.utils.book_append_sheet(libro, hoja, 'Saneamiento');
       XLSX.writeFile(libro, `trabunda-reporte-${cabecera.id}-saneamiento.xlsx`);
       return;
@@ -369,6 +390,13 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
     // Fila de totales
     const totalHrs = lineas.reduce((s, l) => s + (Number(l.horas) || 0), 0);
     rows.push(['', '', `TOTAL: ${lineas.length} trabajadores`, '', '', totalHrs.toFixed(1), '']);
+
+    // Observaciones del reporte (si las hay)
+    const obsApoyo = String(cabecera?.observaciones ?? '').trim();
+    if (obsApoyo) {
+      rows.push(['', '', '', '', '', '', '']);
+      rows.push(['OBSERVACIONES:', obsApoyo, '', '', '', '', '']);
+    }
 
     const hoja = XLSX.utils.aoa_to_sheet([head, ...rows]);
     hoja['!cols'] = [6, 12, 36, 10, 10, 12, 28].map(wch => ({ wch }));
