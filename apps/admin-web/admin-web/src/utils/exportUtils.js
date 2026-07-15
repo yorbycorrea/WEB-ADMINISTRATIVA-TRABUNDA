@@ -400,6 +400,7 @@ export function exportReporteDetalleExcel(cabecera, contenido, tipo) {
 
     if (esSaneamiento) {
       const head = ['ITEM', 'CÓDIGO', 'NOMBRE', 'COD. ACTIVIDAD', 'ACTIVIDAD', 'CVSE'];
+      console.log(lineas);
       const rows = lineas.map((l, i) => [
         i + 1,
         l.trabajador_codigo ?? '',
