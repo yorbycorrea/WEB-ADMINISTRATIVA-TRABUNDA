@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import {
   AlertCircle, CheckCircle, ClipboardList, Download, Eye, PackageCheck,
-  RefreshCw, Search, ShieldCheck, UserCheck, X, XCircle,
+  EyeOff, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck,
+  X, XCircle,
 } from 'lucide-react';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
 import {
+  apiActualizarGuantesUsuario,
+  apiCrearGuantesUsuario,
+  apiDesactivarGuantesUsuario,
   apiGetGuantesDashboard,
   apiGetGuantesRequerimientos,
   apiGetGuantesRequerimientoDetalle,
   apiGetGuantesSalidasAlmacen,
+  apiGetGuantesUsuarios,
   apiGetGuantesRequeridoVsEntregado,
 } from '../api/gateway';
 
@@ -72,11 +78,11 @@ function NotConfigured() {
       </p>
       <pre className="mt-4 bg-slate-900 text-emerald-300 rounded-xl p-4 text-xs overflow-x-auto">
 {`GUANTES_BACKEND_URL=http://servidor-glovtrack:3000
-GUANTES_ADMIN_DNI=76134951
+GUANTES_ADMIN_DNI=99999999
 GUANTES_ADMIN_PASS=tu_password`}
       </pre>
       <p className="text-xs text-amber-700 mt-3">
-        Usa un usuario de rol almacén o lavandería para que pueda ver todos los requerimientos.
+        Usa el usuario de rol admin de GlovTrack para monitorear y administrar Guantes.
       </p>
     </div>
   );
@@ -466,7 +472,268 @@ function ReporteTabla({ title, icon, rows, columns }) {
   );
 }
 
+const ROLES_GUANTES = [
+  { key: 'admin', label: 'Admin' },
+  { key: 'supervisor', label: 'Supervisor' },
+  { key: 'almacen', label: 'Almacén' },
+  { key: 'lavanderia', label: 'Lavandería' },
+  { key: 'acopiador', label: 'Acopiador' },
+];
+
+function RolBadge({ rol }) {
+  const cls = {
+    admin: 'bg-slate-900 text-white',
+    supervisor: 'bg-blue-100 text-blue-700',
+    almacen: 'bg-amber-100 text-amber-700',
+    lavanderia: 'bg-cyan-100 text-cyan-700',
+    acopiador: 'bg-violet-100 text-violet-700',
+  }[rol] ?? 'bg-slate-100 text-slate-600';
+
+  return <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${cls}`}>{rol ?? '-'}</span>;
+}
+
+function UsuarioModal({ user, onClose, onSave }) {
+  const isEdit = Boolean(user);
+  const [form, setForm] = useState({
+    dni: user?.dni ?? '',
+    nombre: user?.nombre ?? '',
+    apellido: user?.apellido ?? '',
+    rol: user?.rol ?? 'supervisor',
+    activo: user?.activo ?? 1,
+    password: '',
+  });
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function guardar(e) {
+    e.preventDefault();
+    if (!isEdit && !form.password) {
+      setError('La contraseña es obligatoria');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = { ...form, activo: Boolean(form.activo) };
+      if (isEdit) {
+        delete payload.dni;
+        if (!payload.password) delete payload.password;
+      }
+      await onSave(payload);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-950/60" onClick={onClose} />
+      <form onSubmit={guardar} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-slate-800">{isEdit ? 'Editar usuario' : 'Nuevo usuario Guantes'}</h2>
+            <p className="text-xs text-slate-400">Acceso interno a GlovTrack</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600">{error}</div>}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase">DNI</label>
+              <input value={form.dni} disabled={isEdit} onChange={e => setForm(f => ({ ...f, dni: e.target.value.replace(/\D/g, '') }))}
+                className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm disabled:bg-slate-100" required />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase">Rol</label>
+              <select value={form.rol} onChange={e => setForm(f => ({ ...f, rol: e.target.value }))}
+                className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+                {ROLES_GUANTES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase">Nombre</label>
+              <input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+                className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" required />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase">Apellido</label>
+              <input value={form.apellido} onChange={e => setForm(f => ({ ...f, apellido: e.target.value }))}
+                className="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" required />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-400 uppercase">
+              Contraseña {isEdit && <span className="normal-case font-medium text-slate-400">(opcional)</span>}
+            </label>
+            <div className="relative mt-1">
+              <input type={showPass ? 'text' : 'password'} value={form.password}
+                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 pr-10 text-sm" />
+              <button type="button" onClick={() => setShowPass(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {isEdit && (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+              <input type="checkbox" checked={Boolean(form.activo)} onChange={e => setForm(f => ({ ...f, activo: e.target.checked ? 1 : 0 }))} />
+              Usuario activo
+            </label>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              Cancelar
+            </button>
+            <button disabled={loading}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 disabled:opacity-50">
+              {loading ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function TabUsuariosGuantes() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  async function cargar() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGetGuantesUsuarios();
+      setUsuarios(data?.usuarios ?? []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { cargar(); }, []);
+
+  async function guardar(payload) {
+    if (modal === 'create') {
+      await apiCrearGuantesUsuario(payload);
+    } else {
+      await apiActualizarGuantesUsuario(modal.user.id, payload);
+    }
+    await cargar();
+  }
+
+  async function desactivar(user) {
+    if (!window.confirm(`¿Desactivar a ${user.nombre} ${user.apellido}?`)) return;
+    setDeleting(user.id);
+    try {
+      await apiDesactivarGuantesUsuario(user.id);
+      await cargar();
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      {modal && (
+        <UsuarioModal
+          user={modal === 'create' ? null : modal.user}
+          onClose={() => setModal(null)}
+          onSave={guardar}
+        />
+      )}
+
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-bold text-slate-800">Usuarios de Guantes</h2>
+            <p className="text-xs text-slate-400">{usuarios.length} usuarios registrados en GlovTrack</p>
+          </div>
+          <button onClick={() => setModal('create')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500">
+            <Plus size={14} /> Nuevo usuario
+          </button>
+        </div>
+
+        {error && <div className="m-6 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600">{error}</div>}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                {['Usuario', 'DNI', 'Rol', 'Estado', 'Creado', ''].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr><td colSpan="6" className="px-4 py-10 text-center text-slate-400">Cargando usuarios...</td></tr>
+              ) : usuarios.length === 0 ? (
+                <tr><td colSpan="6" className="px-4 py-10 text-center text-slate-400">Sin usuarios</td></tr>
+              ) : usuarios.map(user => (
+                <tr key={user.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
+                        {(user.nombre || 'U').slice(0, 1)}{(user.apellido || '').slice(0, 1)}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-800">{user.nombre} {user.apellido}</p>
+                        <p className="text-xs text-slate-400">ID {user.id}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{user.dni}</td>
+                  <td className="px-4 py-3"><RolBadge rol={user.rol} /></td>
+                  <td className="px-4 py-3">
+                    {user.activo ? <span className="text-emerald-600 font-semibold">Activo</span> : <span className="text-slate-400">Inactivo</span>}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{fmtFecha(user.created_at)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex gap-1.5">
+                      <button onClick={() => setModal({ user })}
+                        className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50" title="Editar">
+                        <Pencil size={15} />
+                      </button>
+                      <button disabled={deleting === user.id || !user.activo} onClick={() => desactivar(user)}
+                        className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40" title="Desactivar">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GuantesPage() {
+  const { user } = useAuth();
+  const isSuperadmin = user?.role === 'superadmin';
   const [tab, setTab] = useState('resumen');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -497,6 +764,7 @@ export default function GuantesPage() {
     { id: 'resumen', label: 'Resumen' },
     { id: 'requerimientos', label: 'Requerimientos' },
     { id: 'reportes', label: 'Reportes' },
+    ...(isSuperadmin ? [{ id: 'usuarios', label: 'Usuarios', badge: 'SA' }] : []),
   ];
 
   return (
@@ -509,8 +777,9 @@ export default function GuantesPage() {
           <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
             {tabs.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all ${tab === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 {t.label}
+                {t.badge && <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full font-bold leading-none">{t.badge}</span>}
               </button>
             ))}
           </div>
@@ -533,6 +802,7 @@ export default function GuantesPage() {
         {tab === 'resumen' && <TabResumen data={data} loading={loading} onRefresh={cargarDashboard} />}
         {tab === 'requerimientos' && <TabRequerimientos />}
         {tab === 'reportes' && <TabReportes />}
+        {tab === 'usuarios' && isSuperadmin && <TabUsuariosGuantes />}
       </div>
     </Layout>
   );

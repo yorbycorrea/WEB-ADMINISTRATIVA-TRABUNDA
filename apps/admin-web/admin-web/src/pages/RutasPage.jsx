@@ -17,6 +17,7 @@ import {
   apiToggleRuta,
   apiGetTrabajadoresSinArea,
   apiGetRutasAreas,
+  apiGetRutasCargos,
   apiAsignarAreaTrabajador,
   apiAsignarAreaBulk,
   apiGetRutasTrabajadores,
@@ -1233,32 +1234,32 @@ function TabTrabajadores() {
   const [total,        setTotal]        = useState(0);
   const [page,         setPage]         = useState(1);
 
-  // Filtros — el backend soporta: id_area, id_ruta, con_ruta, hoy
-  const [idArea,   setIdArea]   = useState('');
+  // Filtros — el backend soporta: cargo, id_ruta, con_ruta, hoy
+  const [cargo,    setCargo]    = useState('');
   const [idRuta,   setIdRuta]   = useState('');
   const [conRuta,  setConRuta]  = useState(false); // solo trabajadores con ruta asignada
   const [soloHoy,  setSoloHoy]  = useState(true);  // true=scan de HOY, false=histórico
 
   // Datos para los selects
-  const [areas, setAreas] = useState([]);
+  const [cargos, setCargos] = useState([]);
   const [rutas, setRutas] = useState([]);
 
-  // Cargar áreas y rutas al montar
+  // Cargar cargos y rutas al montar
   useEffect(() => {
-    apiGetRutasAreas()
-      .then(res => setAreas(res?.items ?? []))
-      .catch(() => setAreas([]));
+    apiGetRutasCargos()
+      .then(res => setCargos(res?.items ?? []))
+      .catch(() => setCargos([]));
     apiGetRutasAdminRutas()
       .then(res => setRutas(res?.rutas ?? res?.data ?? []))
       .catch(() => setRutas([]));
   }, []);
 
-  // Cargar trabajadores — el backend devuelve TODOS (sin paginación)
-  const fetchTrabajadores = useCallback(async ({ id_area, id_ruta, con_ruta, hoy, page = 1 } = {}) => {
+  // Cargar trabajadores
+  const fetchTrabajadores = useCallback(async ({ cargo, id_ruta, con_ruta, hoy, page = 1 } = {}) => {
     setLoading(true); setError(null);
     try {
       const res = await apiGetRutasTrabajadores({
-        id_area:  id_area  || undefined,
+        cargo:    cargo    || undefined,
         id_ruta:  id_ruta  || undefined,
         con_ruta: con_ruta ? '1' : undefined,
         hoy:      hoy ? '1' : '0',
@@ -1281,15 +1282,15 @@ function TabTrabajadores() {
 
   // Recargar cuando cambian los filtros
   useEffect(() => {
-    fetchTrabajadores({ id_area: idArea, id_ruta: idRuta, con_ruta: conRuta, hoy: soloHoy, page });
-  }, [idArea, idRuta, conRuta, soloHoy, page, fetchTrabajadores]);
+    fetchTrabajadores({ cargo, id_ruta: idRuta, con_ruta: conRuta, hoy: soloHoy, page });
+  }, [cargo, idRuta, conRuta, soloHoy, page, fetchTrabajadores]);
 
   useEffect(() => {
     setPage(1);
-  }, [idArea, idRuta, conRuta, soloHoy]);
+  }, [cargo, idRuta, conRuta, soloHoy]);
 
   function handleLimpiar() {
-    setIdArea(''); setIdRuta(''); setConRuta(false); setSoloHoy(true);
+    setCargo(''); setIdRuta(''); setConRuta(false); setSoloHoy(true);
   }
 
   const [exporting, setExporting] = useState(false);
@@ -1305,7 +1306,7 @@ function TabTrabajadores() {
       let total = Infinity;
       while (all.length < total) {
         const res = await apiGetRutasTrabajadores({
-          id_area:  idArea  || undefined,
+          cargo:    cargo   || undefined,
           id_ruta:  idRuta  || undefined,
           con_ruta: conRuta ? '1' : undefined,
           hoy:      soloHoy ? '1' : '0',
@@ -1323,14 +1324,14 @@ function TabTrabajadores() {
       exportRutasTrabajadoresExcel(all, {
         soloHoy,
         conRuta,
-        areaLabel: idArea ? (areas.find(a => String(a.id_area) === String(idArea))?.nombre ?? `#${idArea}`) : 'Todas',
+        cargoLabel: cargo || 'Todos',
         rutaLabel: idRuta ? (rutas.find(r => String(r.id_ruta) === String(idRuta))?.nombre ?? `#${idRuta}`) : 'Todas',
       });
     } catch (e) { setError(e.message); }
     finally { setExporting(false); }
   }
 
-  const hayFiltros = idArea || idRuta || conRuta || !soloHoy;
+  const hayFiltros = cargo || idRuta || conRuta || !soloHoy;
   const totalPages = Math.max(1, Math.ceil(total / WORKERS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const startIndex   = (safePage - 1) * WORKERS_PER_PAGE;
@@ -1352,7 +1353,7 @@ function TabTrabajadores() {
         </div>
         <div>
           <p className="font-bold text-blue-800 text-sm">Directorio de Trabajadores</p>
-          <p className="text-xs text-blue-500 mt-0.5">Acceso restringido · Solo superadmin · Consulta de área y ruta asignada</p>
+          <p className="text-xs text-blue-500 mt-0.5">Acceso restringido · Solo superadmin · Consulta de cargo y ruta asignada</p>
         </div>
       </div>
 
@@ -1360,14 +1361,14 @@ function TabTrabajadores() {
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h2 className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-4">Filtros</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end">
-          {/* Área */}
+          {/* Cargo */}
           <div>
-            <label className="text-xs font-medium text-slate-500 mb-1 block">Área</label>
-            <select value={idArea} onChange={e => setIdArea(e.target.value)}
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Cargo</label>
+            <select value={cargo} onChange={e => setCargo(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Todas las áreas</option>
-              {areas.map(a => (
-                <option key={a.id_area} value={a.id_area}>{a.nombre} ({a.codigo})</option>
+              <option value="">Todos los cargos</option>
+              {cargos.map(c => (
+                <option key={c.cargo} value={c.cargo}>{c.cargo} ({c.total})</option>
               ))}
             </select>
           </div>
@@ -1451,7 +1452,7 @@ function TabTrabajadores() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {['DNI', 'Nombre completo', 'Cargo', 'Área', 'Ruta', 'Hora scan'].map(col => (
+                {['DNI', 'Nombre completo', 'Cargo', 'Ruta', 'Hora scan'].map(col => (
                   <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
                 ))}
               </tr>
@@ -1460,7 +1461,7 @@ function TabTrabajadores() {
               {loading && trabajadores.length === 0 ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={i} className="border-b border-slate-100">
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 bg-slate-200 rounded animate-pulse" style={{ width: `${55 + (j * 9) % 35}%` }} />
                       </td>
@@ -1469,7 +1470,7 @@ function TabTrabajadores() {
                 ))
               ) : trabajadores.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-14 text-center text-slate-400">
+                  <td colSpan={5} className="px-4 py-14 text-center text-slate-400">
                     <Users size={36} className="mx-auto mb-3 opacity-25" />
                     <p className="text-sm font-medium">No se encontraron trabajadores</p>
                     <p className="text-xs mt-1 text-slate-300">Ajusta los filtros o verifica la conexión con el backend</p>
@@ -1478,9 +1479,6 @@ function TabTrabajadores() {
               ) : (
                 trabajadores.map((trab, i) => {
                   const nombreCompleto = `${(trab.apellidos ?? '').toUpperCase()}, ${trab.nombres ?? ''}`.trim() || '—';
-                  // Campos exactos que devuelve el backend
-                  const areaNombre = trab.area_nombre ?? '—';
-                  const areaCodigo = trab.area_codigo ?? null;
                   const rutaNombre = trab.ruta_nombre ?? null;
                   const rutaCodigo = trab.ruta_codigo ?? null;
                   const horaScan   = trab.hora_scan   ?? null;
@@ -1491,14 +1489,6 @@ function TabTrabajadores() {
                       <td className="px-4 py-3 font-mono text-slate-700 text-xs">{trab.dni ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-800">{nombreCompleto}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{trab.cargo ?? '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {areaCodigo && (
-                            <span className="font-mono text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">{areaCodigo}</span>
-                          )}
-                          <span className="text-sm text-slate-700">{areaNombre}</span>
-                        </div>
-                      </td>
                       <td className="px-4 py-3">
                         {rutaNombre
                           ? <div className="flex items-center gap-1.5">

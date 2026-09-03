@@ -103,6 +103,30 @@ export function apiGetGuantesRequeridoVsEntregado({ desde, hasta } = {}) {
   return apiFetch(`/dashboard/guantes/reportes/requerido-vs-entregado?${params}`);
 }
 
+export function apiGetGuantesUsuarios() {
+  return apiFetch('/dashboard/guantes/admin/usuarios');
+}
+
+export function apiCrearGuantesUsuario(data) {
+  return apiFetch('/dashboard/guantes/admin/usuarios', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function apiActualizarGuantesUsuario(id, data) {
+  return apiFetch(`/dashboard/guantes/admin/usuarios/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export function apiDesactivarGuantesUsuario(id) {
+  return apiFetch(`/dashboard/guantes/admin/usuarios/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 // Reportes de Rutas: lista de jornadas con filtros opcionales
 export function apiGetRutasReportes({ fecha, id_turno, id_ruta, placa, estado, limit = 100, offset = 0 } = {}) {
   const params = new URLSearchParams({ limit, offset });
@@ -169,7 +193,7 @@ export function apiToggleRuta(id, activo) {
   });
 }
 
-// Trabajadores escaneados en la fecha dada pero sin id_area asignado
+// Trabajadores escaneados en la fecha dada pero sin clasificación asignada
 export function apiGetTrabajadoresSinArea({ fecha, id_ruta } = {}) {
   const params = new URLSearchParams();
   if (fecha)   params.set('fecha',   fecha);
@@ -180,6 +204,11 @@ export function apiGetTrabajadoresSinArea({ fecha, id_ruta } = {}) {
 // Listar todas las áreas activas del sistema Rutas
 export function apiGetRutasAreas() {
   return apiFetch('/dashboard/rutas/admin/areas');
+}
+
+// Listar cargos activos del sistema Rutas
+export function apiGetRutasCargos() {
+  return apiFetch('/dashboard/rutas/admin/cargos');
 }
 
 // Asignar área a un trabajador individual por DNI
@@ -198,13 +227,13 @@ export function apiAsignarAreaBulk(id_area, dnis) {
   });
 }
 
-// Listar trabajadores con área asignada (y ruta del último scan)
-// Endpoint real del backend: GET /trabajadores/con-area
-// Respuesta: { ok, total, items: [{ dni, nombres, apellidos, cargo, id_area, area_codigo, area_nombre, id_ruta, ruta_codigo, ruta_nombre, hora_scan }] }
+// Listar trabajadores con cargo (y ruta del último scan)
+// Endpoint real del backend: GET /trabajadores/con-ruta
+// Respuesta: { ok, total, items: [{ dni, nombres, apellidos, cargo, id_ruta, ruta_codigo, ruta_nombre, hora_scan }] }
 // hoy: '1' = ruta del scan de HOY (default) | '0' = último scan histórico
-export function apiGetRutasTrabajadores({ id_area, id_ruta, con_ruta, hoy = '1', limit = 20, offset= 0} = {}) {
+export function apiGetRutasTrabajadores({ cargo, id_ruta, con_ruta, hoy = '1', limit = 20, offset= 0} = {}) {
   const params = new URLSearchParams({ hoy, limit, offset });
-  if (id_area)  params.set('id_area',  id_area);
+  if (cargo)    params.set('cargo',    cargo);
   if (id_ruta)  params.set('id_ruta',  id_ruta);
   if (con_ruta) params.set('con_ruta', con_ruta);
   return apiFetch(`/dashboard/rutas/admin/trabajadores?${params}`);

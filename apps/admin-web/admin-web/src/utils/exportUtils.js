@@ -802,32 +802,30 @@ export function exportRutasJornadaDetalleExcel(jornada, resumenData, trabajadore
   XLSX.writeFile(libro, `rutas-jornada-${jornada?.id_jornada ?? 'x'}-${jornada?.fecha ?? 'sin-fecha'}.xlsx`);
 }
 
-// ─── Excel: directorio de trabajadores (con área y ruta) ─────────────────────
+// ─── Excel: directorio de trabajadores (con cargo y ruta) ────────────────────
 export function exportRutasTrabajadoresExcel(trabajadores, meta = {}) {
   const libro = XLSX.utils.book_new();
 
-  const cab = ['N°', 'DNI', 'Apellidos', 'Nombres', 'Cargo', 'Cód. Área', 'Área', 'Cód. Ruta', 'Ruta', 'Hora Scan'];
+  const cab = ['N°', 'DNI', 'Apellidos', 'Nombres', 'Cargo', 'Cód. Ruta', 'Ruta', 'Hora Scan'];
   const filas = (trabajadores ?? []).map((t, i) => [
     i + 1,
     t.dni          ?? '—',
     t.apellidos    ?? '—',
     t.nombres      ?? '—',
     t.cargo        ?? '—',
-    t.area_codigo  ?? '—',
-    t.area_nombre  ?? '—',
     t.ruta_codigo  ?? '',
     t.ruta_nombre  ?? 'Sin ruta',
     t.hora_scan    ?? '—',
   ]);
   const hoja = XLSX.utils.aoa_to_sheet([cab, ...filas]);
-  hoja['!cols'] = [5, 12, 24, 20, 26, 10, 22, 10, 22, 12].map(wch => ({ wch }));
+  hoja['!cols'] = [5, 12, 24, 20, 34, 10, 24, 12].map(wch => ({ wch }));
   XLSX.utils.book_append_sheet(libro, hoja, 'Trabajadores');
 
   // Hoja info — qué filtros se aplicaron
   XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
     ['Proyecto',  'Rutas Trabunda'],
     ['Scans',     meta.soloHoy ? 'Solo de hoy' : 'Histórico'],
-    ['Área',      meta.areaLabel  ?? 'Todas'],
+    ['Cargo',     meta.cargoLabel ?? 'Todos'],
     ['Ruta',      meta.rutaLabel  ?? 'Todas'],
     ['Solo con ruta', meta.conRuta ? 'Sí' : 'No'],
     ['Total',     (trabajadores ?? []).length],

@@ -584,6 +584,78 @@ app.get("/dashboard/guantes/reportes/requerido-vs-entregado", verifyToken, requi
   }
 });
 
+app.get("/dashboard/guantes/admin/usuarios", verifyToken, requireSuperadmin, async (_req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false, error: "Backend de Guantes no configurado en .env" });
+  }
+  try {
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/usuarios?incluir_inactivos=1`);
+    res.json({ usuarios: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al listar usuarios de Guantes", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo listar usuarios de Guantes", detail: err.message });
+  }
+});
+
+app.post("/dashboard/guantes/admin/usuarios", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false, error: "Backend de Guantes no configurado en .env" });
+  }
+  try {
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/usuarios`, {
+      method: "POST",
+      body: JSON.stringify(req.body),
+    });
+    res.status(201).json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al crear usuario de Guantes", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo crear usuario de Guantes", detail: err.message });
+  }
+});
+
+app.put("/dashboard/guantes/admin/usuarios/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/usuarios/${req.params.id}`, {
+      method: "PUT",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al editar usuario de Guantes", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo editar usuario de Guantes", detail: err.message });
+  }
+});
+
+app.delete("/dashboard/guantes/admin/usuarios/:id", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/usuarios/${req.params.id}`, {
+      method: "DELETE",
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al desactivar usuario de Guantes", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo desactivar usuario de Guantes", detail: err.message });
+  }
+});
+
 
 // ─── DASHBOARD DE RUTAS (requiere permiso "rutas") ────────────────────────────
 app.get("/dashboard/rutas", verifyToken, requirePermission("rutas"), async (_req, res) => {
@@ -684,6 +756,20 @@ app.get("/dashboard/rutas/admin/areas", verifyToken, requireSuperadmin, async (r
     res.json(data);
   } catch (err) {
     res.status(502).json({ error: "No se pudo obtener las áreas", detail: err.message });
+  }
+});
+
+// ─── ADMIN RUTAS: Listar cargos activos (solo superadmin) ───────────────────
+app.get("/dashboard/rutas/admin/cargos", verifyToken, requireSuperadmin, async (req, res) => {
+  const base = process.env.RUTAS_BACKEND_URL;
+  if (!base || !process.env.RUTAS_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/cargos`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener los cargos", detail: err.message });
   }
 });
 
@@ -1196,9 +1282,9 @@ app.delete("/dashboard/calidad/admin/organoletica/:id", verifyToken, requireSupe
 });
 
 
-// ─── ADMIN RUTAS: Listar trabajadores con área (y ruta del último scan) ───────
-// Llama a GET /trabajadores/con-area en el backend de Rutas
-// Params: id_area, id_ruta, con_ruta (1=solo con ruta), hoy (1=scan de hoy [default], 0=histórico)
+// ─── ADMIN RUTAS: Listar trabajadores con cargo (y ruta del último scan) ──────
+// Llama a GET /trabajadores/con-ruta en el backend de Rutas
+// Params: cargo, id_ruta, con_ruta (1=solo con ruta), hoy (1=scan de hoy [default], 0=histórico)
 app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, async (req, res) => {
   const base = process.env.RUTAS_BACKEND_URL;
   if (!base || !process.env.RUTAS_ADMIN_USER) {
@@ -1206,7 +1292,7 @@ app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, a
   }
   try {
     const params = new URLSearchParams();
-    if (req.query.id_area)  params.set("id_area",  req.query.id_area);
+    if (req.query.cargo)    params.set("cargo",    req.query.cargo);
     if (req.query.id_ruta)  params.set("id_ruta",  req.query.id_ruta);
     if (req.query.con_ruta) params.set("con_ruta", req.query.con_ruta);
     // hoy=1 (default del backend): ruta del último scan de HOY
@@ -1214,7 +1300,7 @@ app.get("/dashboard/rutas/admin/trabajadores", verifyToken, requireSuperadmin, a
     params.set("hoy", req.query.hoy ?? "1");
     params.set("limit", req.query.limit ?? "20");
     params.set("offset", req.query.offset ?? "0");
-    const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/con-area?${params}`);
+    const data = await fetchService(getRutasToken, "rutas", `${base}/trabajadores/con-ruta?${params}`);
     res.json(data);
   } catch (err) {
     if (err.backendStatus) {
