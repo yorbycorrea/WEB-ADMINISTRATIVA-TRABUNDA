@@ -3,6 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
+import { Buffer } from "node:buffer";
 import { initDB } from "./db/index.js";
 import { getTrabundaToken, getRutasToken, getCalidadToken, getGuantesToken, invalidateToken } from "./services/serviceAuth.js";
 import { getAllUsers, verifyUser, createUser, updateUser, deleteUser } from "./services/userStore.js";
@@ -1069,6 +1070,58 @@ app.get("/dashboard/calidad/ocr/estado", verifyToken, requirePermission("calidad
       return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener estado OCR", detail: err.backendDetail ?? err.message });
     }
     res.status(502).json({ error: "No se pudo obtener el estado OCR", detail: err.message });
+  }
+});
+
+app.get("/dashboard/calidad/ocr/capturas", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const params = new URLSearchParams();
+    for (const key of ["page", "limit", "fecha", "usuario_id", "tipo", "q"]) {
+      if (req.query[key]) params.set(key, req.query[key]);
+    }
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/ocr/capturas?${params}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener muestras OCR", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudieron obtener las muestras OCR", detail: err.message });
+  }
+});
+
+app.get("/dashboard/calidad/ocr/capturas/:id/foto", verifyToken, requirePermission("calidad"), async (req, res) => {
+  const base = process.env.CALIDAD_BACKEND_URL;
+  if (!base || !process.env.CALIDAD_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const token = await getCalidadToken();
+    const upstream = await fetch(`${base}/ocr/capturas/${encodeURIComponent(req.params.id)}/foto`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (upstream.status === 401 || upstream.status === 403) {
+      invalidateToken("calidad");
+      return res.status(upstream.status).json({ error: "Backend de Calidad rechazó el token" });
+    }
+
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      return res.status(upstream.status).send(text);
+    }
+
+    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    const cacheControl = upstream.headers.get("cache-control") || "private, max-age=300";
+    const body = Buffer.from(await upstream.arrayBuffer());
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", cacheControl);
+    res.send(body);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener la foto OCR", detail: err.message });
   }
 });
 

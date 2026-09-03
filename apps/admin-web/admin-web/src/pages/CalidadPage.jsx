@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   FlaskConical, Thermometer, Scale, ClipboardCheck, Eye, Plus, Pencil, Power,
   RefreshCw, CheckCircle, XCircle, AlertCircle, Search, ChevronLeft, ChevronRight,
-  Bot, X, Database, Shield,
+  Bot, X, Database, Shield, Image as ImageIcon,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,8 @@ import {
   apiGetCalidadReportesOrganoletica,
   apiGetCalidadOrganoleticaDetalle,
   apiGetCalidadOcrEstado,
+  apiGetCalidadOcrCapturas,
+  apiGetCalidadOcrFoto,
   apiGetCalidadProductos,
   apiCreateCalidadProducto,
   apiUpdateCalidadProducto,
@@ -37,6 +39,23 @@ function fmtFechaISO(val) {
   if (!val) return '';
   try { return new Date(val).toISOString().split('T')[0]; }
   catch { return ''; }
+}
+
+function fmtFechaHora(val) {
+  if (!val) return '—';
+  try {
+    const d = new Date(val);
+    return d.toLocaleString('es-PE', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return String(val); }
+}
+
+function fmtDecimal(val, digits = 3) {
+  if (val === null || val === undefined || val === '') return '—';
+  const n = Number(val);
+  return Number.isFinite(n) ? n.toFixed(digits) : String(val);
 }
 
 // ─── Componentes reutilizables ────────────────────────────────────────────────
@@ -99,6 +118,60 @@ function EmptyRow({ cols, msg = 'Sin registros' }) {
     <tr>
       <td colSpan={cols} className="px-4 py-10 text-center text-slate-400 text-sm">{msg}</td>
     </tr>
+  );
+}
+
+function OcrFoto({ id, alt, onOpen }) {
+  const [src, setSrc] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    let objectUrl;
+    setSrc(null);
+    setError(false);
+
+    apiGetCalidadOcrFoto(id)
+      .then((blob) => {
+        if (!alive || !blob) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      })
+      .catch(() => {
+        if (alive) setError(true);
+      });
+
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [id]);
+
+  if (error) {
+    return (
+      <div className="h-20 w-28 rounded-xl bg-red-50 border border-red-100 text-red-400 flex items-center justify-center">
+        <AlertCircle size={18} />
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="h-20 w-28 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 flex items-center justify-center">
+        <RefreshCw size={18} className="animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(src)}
+      className="h-20 w-28 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 hover:ring-2 hover:ring-emerald-400 transition-all"
+      title="Ver foto"
+    >
+      <img src={src} alt={alt} className="h-full w-full object-cover" />
+    </button>
   );
 }
 
@@ -756,6 +829,19 @@ function TabOCR() {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
+  const today = new Date().toISOString().split('T')[0];
+  const [fecha, setFecha] = useState(today);
+  const [usuarioId, setUsuarioId] = useState('');
+  const [tipo, setTipo] = useState('');
+  const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
+  const [capturas, setCapturas] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [capturasLoading, setCapturasLoading] = useState(true);
+  const [capturasError, setCapturasError] = useState(null);
+  const [fotoModal, setFotoModal] = useState(null);
+  const LIMIT = 24;
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -770,12 +856,57 @@ function TabOCR() {
     finally { setLoading(false); }
   }, []);
 
+  const loadCapturas = useCallback(async () => {
+    setCapturasLoading(true); setCapturasError(null);
+    try {
+      const res = await apiGetCalidadOcrCapturas({
+        page,
+        limit: LIMIT,
+        fecha: fecha || undefined,
+        usuario_id: usuarioId || undefined,
+        tipo: tipo || undefined,
+        q: q || undefined,
+      });
+      if (res?.error || res?.ok === false) {
+        setCapturasError(res.error ?? 'No se pudieron obtener las muestras OCR');
+        setCapturas([]);
+        setTotal(0);
+      } else {
+        const arr = Array.isArray(res) ? res : (res?.items ?? []);
+        setCapturas(arr);
+        setUsuarios(res?.usuarios ?? []);
+        setTotal(res?.total ?? arr.length);
+      }
+    } catch (e) {
+      setCapturasError(e.message);
+      setCapturas([]);
+      setTotal(0);
+    } finally {
+      setCapturasLoading(false);
+    }
+  }, [fecha, page, q, tipo, usuarioId]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadCapturas(); }, [loadCapturas]);
 
   const online = data?.activo ?? data?.online ?? data?.estado === 'online' ?? false;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  function handleBuscar() {
+    setPage(1);
+    loadCapturas();
+  }
+
+  function handleLimpiar() {
+    setFecha(today);
+    setUsuarioId('');
+    setTipo('');
+    setQ('');
+    setPage(1);
+  }
 
   return (
-    <div className="max-w-xl">
+    <div className="space-y-5">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -827,6 +958,198 @@ function TabOCR() {
           )}
         </div>
       </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+            <ImageIcon size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800">Muestras OCR</h3>
+            <p className="text-xs text-slate-400">{total} capturas registradas</p>
+          </div>
+          <button
+            onClick={() => { load(); loadCapturas(); }}
+            disabled={loading || capturasLoading}
+            className="ml-auto flex items-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 transition-all disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={(loading || capturasLoading) ? 'animate-spin' : ''} /> Actualizar
+          </button>
+        </div>
+
+        <div className="p-4 border-b border-slate-100 flex flex-wrap gap-3 items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fecha</label>
+            <input
+              type="date"
+              value={fecha}
+              onChange={e => { setFecha(e.target.value); setPage(1); }}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Usuario</label>
+            <select
+              value={usuarioId}
+              onChange={e => { setUsuarioId(e.target.value); setPage(1); }}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-48"
+            >
+              <option value="">Todos</option>
+              {usuarios.map(u => (
+                <option key={u.id} value={u.id}>{u.nombre ?? u.usuario ?? u.id}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo</label>
+            <select
+              value={tipo}
+              onChange={e => { setTipo(e.target.value); setPage(1); }}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Todos</option>
+              <option value="peso">Peso</option>
+              <option value="temperatura">Temperatura</option>
+              <option value="organoleptica">Organoleptica</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Buscar</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Usuario, ruta, registro..."
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                className="pl-8 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-56"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={handleBuscar}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-all flex items-center gap-2"
+          >
+            <Search size={14} /> Buscar
+          </button>
+          <button
+            onClick={handleLimpiar}
+            className="px-4 py-2 bg-slate-100 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-200 transition-all"
+          >
+            Limpiar
+          </button>
+        </div>
+
+        {capturasError && (
+          <div className="px-6 py-3 bg-red-50 border-b border-red-100 text-red-600 text-sm flex items-center gap-2">
+            <AlertCircle size={14} /> {capturasError}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                {['Foto', 'Usuario', 'Tipo', 'Área', 'Valores', 'Registro', 'Fecha'].map(col => (
+                  <th key={col} className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {capturasLoading ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center"><RefreshCw size={24} className="animate-spin text-emerald-500 mx-auto" /></td></tr>
+              ) : capturas.length === 0 ? (
+                <EmptyRow cols={7} msg="Sin muestras OCR para los filtros aplicados" />
+              ) : (
+                capturas.map((cap) => (
+                  <tr key={cap.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors last:border-0 align-top">
+                    <td className="px-4 py-3">
+                      <OcrFoto
+                        id={cap.id}
+                        alt={`Muestra OCR ${cap.id}`}
+                        onOpen={(src) => setFotoModal({ src, captura: cap })}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-800 whitespace-nowrap">{cap.usuario_nombre ?? '—'}</p>
+                      <p className="text-xs text-slate-400">{cap.usuario ?? `ID ${cap.usuario_id}`}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 capitalize">
+                        {cap.tipo ?? '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <p className="capitalize">{cap.area ?? '—'}</p>
+                      <p className="text-xs text-slate-400 capitalize">{cap.turno ?? '—'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-mono text-emerald-700 font-semibold">Detectado: {fmtDecimal(cap.valor_detectado)}</p>
+                      <p className="font-mono text-slate-500">Confirmado: {fmtDecimal(cap.valor_confirmado)}</p>
+                      <p className="text-xs text-slate-400">Confianza: {cap.confianza == null ? '—' : `${fmtDecimal(Number(cap.confianza) * 100, 1)}%`}</p>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <p>{cap.registro_tipo ?? '—'}</p>
+                      <p className="text-xs text-slate-400">{cap.registro_id ? `#${cap.registro_id}` : cap.campo_indice ? `Campo ${cap.campo_indice}` : 'Sin vincular'}</p>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                      {fmtFechaHora(cap.created_at)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {!capturasLoading && capturas.length > 0 && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
+            <p className="text-xs text-slate-500">
+              Página {page} de {totalPages} · {total} muestras
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 transition-all"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 transition-all"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {fotoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={() => setFotoModal(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-base font-bold text-slate-800">{fotoModal.captura.usuario_nombre ?? 'Muestra OCR'}</h2>
+                <p className="text-xs text-slate-400">{fmtFechaHora(fotoModal.captura.created_at)}</p>
+              </div>
+              <button onClick={() => setFotoModal(null)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="bg-slate-950 p-4 overflow-auto">
+              <img src={fotoModal.src} alt="Muestra OCR ampliada" className="max-h-[72vh] mx-auto rounded-lg object-contain" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

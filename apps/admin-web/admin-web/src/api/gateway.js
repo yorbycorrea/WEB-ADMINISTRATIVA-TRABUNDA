@@ -25,6 +25,30 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
+async function apiBlobFetch(path, options = {}) {
+  const token = getToken();
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_user');
+    window.location.href = '/login';
+    return;
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  return res.blob();
+}
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export async function apiLogin(username, password) {
@@ -265,6 +289,19 @@ export function apiGetCalidadReportesOrganoletica({ page=1, limit=25, fecha } = 
 export function apiGetCalidadOrganoleticaDetalle(id) { return apiFetch(`/dashboard/calidad/reportes/organoletica/${id}`); }
 
 export function apiGetCalidadOcrEstado() { return apiFetch('/dashboard/calidad/ocr/estado'); }
+
+export function apiGetCalidadOcrCapturas({ page=1, limit=24, fecha, usuario_id, tipo, q } = {}) {
+  const p = new URLSearchParams({ page, limit });
+  if (fecha)      p.set('fecha', fecha);
+  if (usuario_id) p.set('usuario_id', usuario_id);
+  if (tipo)       p.set('tipo', tipo);
+  if (q)          p.set('q', q);
+  return apiFetch(`/dashboard/calidad/ocr/capturas?${p}`);
+}
+
+export function apiGetCalidadOcrFoto(id) {
+  return apiBlobFetch(`/dashboard/calidad/ocr/capturas/${encodeURIComponent(id)}/foto`);
+}
 
 // Admin
 export function apiGetCalidadProductos() { return apiFetch('/dashboard/calidad/admin/productos'); }
