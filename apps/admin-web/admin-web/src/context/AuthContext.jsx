@@ -38,6 +38,8 @@ export function AuthProvider({ children }) {
     if (hasPermission('overview'))  return '/';
     if (hasPermission('trabunda'))  return '/trabunda';
     if (hasPermission('rutas'))     return '/rutas';
+    if (hasPermission('guantes'))   return '/guantes';
+    if (hasPermission('calidad'))   return '/calidad';
     return '/sin-acceso';
   }
 

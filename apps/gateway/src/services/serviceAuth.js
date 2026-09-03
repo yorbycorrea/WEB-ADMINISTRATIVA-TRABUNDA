@@ -76,6 +76,16 @@ export async function getCalidadToken() {
   );
 }
 
+export async function getGuantesToken() {
+  return getServiceToken(
+    "guantes",
+    `${process.env.GUANTES_BACKEND_URL}/api/auth/login`,
+    process.env.GUANTES_ADMIN_DNI,
+    process.env.GUANTES_ADMIN_PASS,
+    "dni"
+  );
+}
+
 /**
  * Invalida el cache de un servicio (útil si el token fue rechazado con 401)
  */

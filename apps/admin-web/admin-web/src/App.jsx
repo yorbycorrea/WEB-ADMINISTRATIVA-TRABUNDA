@@ -6,6 +6,7 @@ import Dashboard   from './pages/Dashboard';
 import TrabundaPage from './pages/TrabundaPage';
 import RutasPage    from './pages/RutasPage';
 import CalidadPage  from './pages/CalidadPage';
+import GuantesPage  from './pages/GuantesPage';
 import UsersPage    from './pages/UsersPage';
 
 export default function App() {
@@ -39,6 +40,12 @@ export default function App() {
           <Route path="/calidad" element={
             <ProtectedRoute permission="calidad">
               <CalidadPage />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/guantes" element={
+            <ProtectedRoute permission="guantes">
+              <GuantesPage />
             </ProtectedRoute>
           } />
 

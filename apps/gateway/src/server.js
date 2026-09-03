@@ -4,7 +4,7 @@ import morgan from "morgan";
 import jwt from "jsonwebtoken";
 import "dotenv/config";
 import { initDB } from "./db/index.js";
-import { getTrabundaToken, getRutasToken, getCalidadToken, invalidateToken } from "./services/serviceAuth.js";
+import { getTrabundaToken, getRutasToken, getCalidadToken, getGuantesToken, invalidateToken } from "./services/serviceAuth.js";
 import { getAllUsers, verifyUser, createUser, updateUser, deleteUser } from "./services/userStore.js";
 
 const app        = express();
@@ -104,12 +104,12 @@ app.post("/auth/login", async (req, res) => {
   // 1. ¿Es el superadmin?
   if (username === process.env.SUPERADMIN_USER && password === process.env.SUPERADMIN_PASS) {
     const token = jwt.sign(
-      { username, role: "superadmin", permissions: ["overview", "trabunda", "rutas", "users"] },
+      { username, role: "superadmin", permissions: ["overview", "trabunda", "rutas", "calidad", "guantes", "users"] },
       JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
     );
     return res.json({ token, user: { username, role: "superadmin", displayName: "Super Admin",
-      permissions: ["overview", "trabunda", "rutas", "users"] } });
+      permissions: ["overview", "trabunda", "rutas", "calidad", "guantes", "users"] } });
   }
 
   // 2. ¿Es un usuario registrado en users.json?
@@ -139,6 +139,7 @@ app.get("/services/health", verifyToken, async (_req, res) => {
   const services = [
     { name: "trabunda-api", url: `${process.env.TRABUNDA_API_URL || "http://localhost:3001"}/health` },
     { name: "rutas-api",    url: `${process.env.RUTAS_API_URL    || "http://localhost:3002"}/health` },
+    { name: "guantes-api",  url: `${process.env.GUANTES_BACKEND_URL || "http://localhost:3000"}/health` },
   ];
   const results = await Promise.allSettled(
     services.map(({ name, url }) =>
@@ -172,7 +173,7 @@ app.post("/admin/users", verifyToken, requireSuperadmin, async (req, res) => {
   }
 
   // Validamos que los permisos sean valores conocidos
-  const VALID_PERMISSIONS = ["overview", "trabunda", "rutas", "calidad"];
+  const VALID_PERMISSIONS = ["overview", "trabunda", "rutas", "calidad", "guantes"];
   const invalid = (permissions || []).filter(p => !VALID_PERMISSIONS.includes(p));
   if (invalid.length) {
     return res.status(400).json({ error: `Permisos inválidos: ${invalid.join(", ")}` });
@@ -386,6 +387,200 @@ app.get("/dashboard/trabunda/reportes/:id/detalle", verifyToken, requirePermissi
     res.json({ cabecera, contenido, tipo });
   } catch (err) {
     res.status(502).json({ error: "No se pudo obtener el detalle del reporte", detail: err.message });
+  }
+});
+
+// ─── DASHBOARD DE GUANTES / GLOVTRACK (requiere permiso "guantes") ───────────
+function guantesBaseUrl() {
+  return process.env.GUANTES_BACKEND_URL?.replace(/\/+$/, "");
+}
+
+function nombreCompleto(nombre, apellido) {
+  return [nombre, apellido].filter(Boolean).join(" ") || null;
+}
+
+function normalizarRequerimientoGuantes(req) {
+  return {
+    ...req,
+    solicitado_por: nombreCompleto(req.supervisor_nombre, req.supervisor_apellido),
+    despachado_por: nombreCompleto(req.despachado_por_nombre, req.despachado_por_apellido),
+    recibido_por: nombreCompleto(req.recibido_por_nombre, req.recibido_por_apellido),
+    progreso_entrega: {
+      total: Number(req.total_trabajadores ?? 0),
+      entregados: Number(req.total_entregados ?? 0),
+      pendientes: Math.max(Number(req.total_trabajadores ?? 0) - Number(req.total_entregados ?? 0), 0),
+    },
+  };
+}
+
+function filtrarRequerimientosGuantes(items, query) {
+  const fecha = query.fecha || "";
+  const turno = query.turno || "";
+  const area = String(query.area || "").trim().toLowerCase();
+  const q = String(query.q || "").trim().toLowerCase();
+
+  return items.filter((item) => {
+    const fechaItem = String(item.fecha_requerimiento || "").slice(0, 10);
+    if (fecha && fechaItem !== fecha) return false;
+    if (turno && item.turno !== turno) return false;
+    if (area && !String(item.area_nombre || "").toLowerCase().includes(area)) return false;
+    if (!q) return true;
+
+    const texto = [
+      item.codigo,
+      item.estado,
+      item.area_nombre,
+      item.solicitado_por,
+      item.despachado_por,
+      item.recibido_por,
+      item.tipo_guante,
+      item.tipo_descripcion,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return texto.includes(q);
+  });
+}
+
+app.get("/dashboard/guantes", verifyToken, requirePermission("guantes"), async (_req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false, error: "Backend de Guantes no configurado en .env" });
+  }
+
+  try {
+    const call = (path) => fetchService(getGuantesToken, "guantes", `${base}${path}`);
+    const [health, requerimientos, inventario, salidas, requeridoVsEntregado] = await Promise.allSettled([
+      fetch(`${base}/health`).then(r => r.json()).catch(() => null),
+      call("/api/requerimientos"),
+      call("/api/inventario"),
+      call("/api/reportes/salidas-almacen"),
+      call("/api/reportes/requerido-vs-entregado"),
+    ]);
+
+    const reqItems = (requerimientos.status === "fulfilled" && Array.isArray(requerimientos.value))
+      ? requerimientos.value.map(normalizarRequerimientoGuantes)
+      : [];
+
+    const porEstado = reqItems.reduce((acc, item) => {
+      acc[item.estado] = (acc[item.estado] || 0) + 1;
+      return acc;
+    }, {});
+
+    const totalPendientesEntrega = reqItems.reduce(
+      (sum, item) => sum + Number(item.progreso_entrega?.pendientes ?? 0),
+      0
+    );
+
+    res.json({
+      configured: true,
+      health: health.status === "fulfilled" ? health.value : null,
+      inventario: inventario.status === "fulfilled" ? inventario.value : [],
+      requerimientos: {
+        total: reqItems.length,
+        porEstado,
+        pendientesEntrega: totalPendientesEntrega,
+        items: reqItems.slice(0, 12),
+      },
+      reportes: {
+        salidasAlmacen: salidas.status === "fulfilled" ? salidas.value : null,
+        requeridoVsEntregado: requeridoVsEntregado.status === "fulfilled" ? requeridoVsEntregado.value : null,
+      },
+    });
+  } catch (err) {
+    res.status(502).json({ configured: true, error: "No se pudo conectar con Guantes", detail: err.message });
+  }
+});
+
+app.get("/dashboard/guantes/requerimientos", verifyToken, requirePermission("guantes"), async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false, error: "Backend de Guantes no configurado en .env" });
+  }
+
+  try {
+    const params = new URLSearchParams();
+    if (req.query.estado) params.set("estado", req.query.estado);
+
+    const data = await fetchService(
+      getGuantesToken,
+      "guantes",
+      `${base}/api/requerimientos${params.toString() ? `?${params}` : ""}`
+    );
+
+    const items = Array.isArray(data) ? data.map(normalizarRequerimientoGuantes) : [];
+    const filtrados = filtrarRequerimientosGuantes(items, req.query);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 25, 1), 100);
+    const start = (page - 1) * limit;
+
+    res.json({
+      items: filtrados.slice(start, start + limit),
+      total: filtrados.length,
+      page,
+      totalPages: Math.max(Math.ceil(filtrados.length / limit), 1),
+    });
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener requerimientos", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener requerimientos de Guantes", detail: err.message });
+  }
+});
+
+app.get("/dashboard/guantes/requerimientos/:id", verifyToken, requirePermission("guantes"), async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false });
+  }
+
+  try {
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/requerimientos/${req.params.id}`);
+    const trabajadores = (data.trabajadores ?? []).map((t) => ({
+      ...t,
+      trabajador: nombreCompleto(t.nombre, t.apellido),
+      entregado_por_nombre_completo: nombreCompleto(t.entregado_por_nombre, t.entregado_por_apellido),
+    }));
+
+    res.json({
+      ...normalizarRequerimientoGuantes(data),
+      trabajadores,
+    });
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener detalle", detail: err.backendDetail ?? err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener detalle de Guantes", detail: err.message });
+  }
+});
+
+app.get("/dashboard/guantes/reportes/salidas-almacen", verifyToken, requirePermission("guantes"), async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const params = new URLSearchParams();
+    if (req.query.desde) params.set("desde", req.query.desde);
+    if (req.query.hasta) params.set("hasta", req.query.hasta);
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/reportes/salidas-almacen?${params}`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener salidas de almacén", detail: err.message });
+  }
+});
+
+app.get("/dashboard/guantes/reportes/requerido-vs-entregado", verifyToken, requirePermission("guantes"), async (req, res) => {
+  const base = guantesBaseUrl();
+  if (!base || !process.env.GUANTES_ADMIN_DNI) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const params = new URLSearchParams();
+    if (req.query.desde) params.set("desde", req.query.desde);
+    if (req.query.hasta) params.set("hasta", req.query.hasta);
+    const data = await fetchService(getGuantesToken, "guantes", `${base}/api/reportes/requerido-vs-entregado?${params}`);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: "No se pudo obtener requerido vs entregado", detail: err.message });
   }
 });
 

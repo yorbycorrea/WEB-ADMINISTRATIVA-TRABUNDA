@@ -8,12 +8,16 @@ const APP_PERMISSIONS = [
   { key: 'overview',  label: 'Overview',  desc: 'Dashboard general del sistema',   color: 'blue'    },
   { key: 'trabunda',  label: 'Trabunda',  desc: 'Gestión operativa de trabajadores', color: 'violet'  },
   { key: 'rutas',     label: 'Rutas',     desc: 'Control de acceso y transporte',   color: 'emerald' },
+  { key: 'guantes',   label: 'Guantes',   desc: 'Monitoreo de requerimientos y entregas', color: 'amber' },
+  { key: 'calidad',   label: 'Calidad',   desc: 'Reportes y catálogos de calidad', color: 'cyan' },
 ];
 
 const colorMap = {
   blue:    'bg-blue-100 text-blue-700 border-blue-200',
   violet:  'bg-violet-100 text-violet-700 border-violet-200',
   emerald: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  amber:   'bg-amber-100 text-amber-700 border-amber-200',
+  cyan:    'bg-cyan-100 text-cyan-700 border-cyan-200',
 };
 
 // ─── Modal para crear o editar un usuario ────────────────────────────────────
@@ -342,6 +346,8 @@ export default function UsersPage() {
             <li>• <span className="text-blue-400">Overview</span> — ve el dashboard general con estado de todos los servicios</li>
             <li>• <span className="text-violet-400">Trabunda</span> — ve reportes, áreas y módulos operativos de Trabunda</li>
             <li>• <span className="text-emerald-400">Rutas</span> — ve empresas de transporte, jornadas y sesiones de escaneo</li>
+            <li>• <span className="text-amber-400">Guantes</span> — ve requerimientos, responsables, despacho y entregas por trabajador</li>
+            <li>• <span className="text-cyan-400">Calidad</span> — ve reportes operativos de calidad</li>
             <li className="pt-1 text-slate-500">El superadmin siempre tiene acceso total y no aparece en esta lista.</li>
           </ul>
         </div>

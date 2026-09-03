@@ -69,6 +69,40 @@ export function apiGetRutasDashboard() {
   return apiFetch('/dashboard/rutas');
 }
 
+// ─── Guantes / GlovTrack ────────────────────────────────────────────────────
+
+export function apiGetGuantesDashboard() {
+  return apiFetch('/dashboard/guantes');
+}
+
+export function apiGetGuantesRequerimientos({ fecha, estado, turno, area, q, page = 1, limit = 25 } = {}) {
+  const params = new URLSearchParams({ page, limit });
+  if (fecha)  params.set('fecha',  fecha);
+  if (estado) params.set('estado', estado);
+  if (turno)  params.set('turno',  turno);
+  if (area)   params.set('area',   area);
+  if (q)      params.set('q',      q);
+  return apiFetch(`/dashboard/guantes/requerimientos?${params}`);
+}
+
+export function apiGetGuantesRequerimientoDetalle(id) {
+  return apiFetch(`/dashboard/guantes/requerimientos/${id}`);
+}
+
+export function apiGetGuantesSalidasAlmacen({ desde, hasta } = {}) {
+  const params = new URLSearchParams();
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+  return apiFetch(`/dashboard/guantes/reportes/salidas-almacen?${params}`);
+}
+
+export function apiGetGuantesRequeridoVsEntregado({ desde, hasta } = {}) {
+  const params = new URLSearchParams();
+  if (desde) params.set('desde', desde);
+  if (hasta) params.set('hasta', hasta);
+  return apiFetch(`/dashboard/guantes/reportes/requerido-vs-entregado?${params}`);
+}
+
 // Reportes de Rutas: lista de jornadas con filtros opcionales
 export function apiGetRutasReportes({ fecha, id_turno, id_ruta, placa, estado, limit = 100, offset = 0 } = {}) {
   const params = new URLSearchParams({ limit, offset });

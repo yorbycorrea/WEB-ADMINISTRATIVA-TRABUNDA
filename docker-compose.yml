@@ -70,6 +70,9 @@ services:
       - CALIDAD_BACKEND_URL=${CALIDAD_BACKEND_URL}
       - CALIDAD_ADMIN_USER=${CALIDAD_ADMIN_USER}
       - CALIDAD_ADMIN_PASS=${CALIDAD_ADMIN_PASS}
+      - GUANTES_BACKEND_URL=${GUANTES_BACKEND_URL}
+      - GUANTES_ADMIN_DNI=${GUANTES_ADMIN_DNI}
+      - GUANTES_ADMIN_PASS=${GUANTES_ADMIN_PASS}
     depends_on:
       postgres:
         condition: service_healthy   # espera a que postgres esté listo
