@@ -89,6 +89,17 @@ async function fetchService(getToken, invalidateName, url, options = {}) {
   return res.json();
 }
 
+function normalizeCalidadOcrEstado(data) {
+  const status = String(data?.status ?? "").toLowerCase();
+  const online = data?.online === true || data?.activo === true || status === "ok" || status === "online";
+  return {
+    ...data,
+    online,
+    activo: online,
+    estado: online ? "online" : "offline",
+  };
+}
+
 
 // ─── RUTAS PÚBLICAS ───────────────────────────────────────────────────────────
 
@@ -900,7 +911,7 @@ app.get("/dashboard/calidad", verifyToken, requirePermission("calidad"), async (
       call("/temperatura"),
       call("/organol%C3%A9ptica"),
       call("/catalogos/supervisores"),
-      call("/ocr/estado"),
+      call("/ocr/health").then(normalizeCalidadOcrEstado),
     ]);
 
     const pesosData        = pesosReportes.status  === "fulfilled" ? pesosReportes.value  : null;
@@ -1051,8 +1062,8 @@ app.get("/dashboard/calidad/ocr/estado", verifyToken, requirePermission("calidad
     return res.status(503).json({ configured: false });
   }
   try {
-    const data = await fetchService(getCalidadToken, "calidad", `${base}/ocr/estado`);
-    res.json(data);
+    const data = await fetchService(getCalidadToken, "calidad", `${base}/ocr/health`);
+    res.json(normalizeCalidadOcrEstado(data));
   } catch (err) {
     if (err.backendStatus) {
       return res.status(err.backendStatus).json({ ok: false, error: "Error al obtener estado OCR", detail: err.backendDetail ?? err.message });
