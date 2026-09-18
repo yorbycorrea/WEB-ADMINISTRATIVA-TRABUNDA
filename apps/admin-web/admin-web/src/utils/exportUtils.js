@@ -132,13 +132,17 @@ function encabezadoInstitucion(doc, cabecera) {
   const esSaneamiento = tipo === 'SANEAMIENTO';
   const bloqueCodigo = meta
     ? `${meta.codigoLabel}: ${codigo}\nVersión: ${meta.version}\nFecha emisión:${meta.fechaEmision}${meta.mostrarPagina ? `\nPágina: 1 de ${TOTAL_PAGES_EXP}` : ''}`
-    : `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`;
+    : esSaneamiento
+      ? `Código: ${codigo}\nVersión: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`
+      : `Código: ${codigo}\nVersion: 03\nFecha emisión:Mayo 2026\nPágina: 1 de ${TOTAL_PAGES_EXP}`;
 
   // Fila 1: empresa | título | código
   autoTable(doc, {
     body: [[
       { content: 'TRABUNDA SAC', styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 10 } },
-      { content: `FORMATO\n${titulo}`, styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 8 } },
+      esSaneamiento
+        ? { content: 'FORMATO : SANEAMIENTO', styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 9 } }
+        : { content: `FORMATO\n${titulo}`, styles: { fontStyle: 'bold', halign: 'center', valign: 'middle', fontSize: 8 } },
       { content: bloqueCodigo, styles: { halign: 'left', valign: 'middle', fontSize: esSaneamiento ? 6.5 : 7, textColor: [0, 0, 0] } },
     ]],
     startY: 12,
@@ -148,8 +152,32 @@ function encabezadoInstitucion(doc, cabecera) {
     theme: 'grid',
   });
 
-  // Fila 2: planillero/turno | fecha  (formato fiel al original)
-  if (meta) {
+  // Fila 2: encabezado secundario (fiel al formato de la app)
+  if (esSaneamiento) {
+    // Área (fila completa)
+    autoTable(doc, {
+      body: [[
+        { content: `Área: ${TIPO_LABELS.SANEAMIENTO}`, styles: { fontStyle: 'normal', fontSize: 8, valign: 'top' } },
+      ]],
+      startY: doc.lastAutoTable.finalY,
+      margin: { left: 14, right: 14 },
+      styles: { lineColor: [0, 0, 0], lineWidth: 0.3, cellPadding: 2 },
+      columnStyles: { 0: { cellWidth: 'auto' } },
+      theme: 'grid',
+    });
+    // Turno | Fecha
+    autoTable(doc, {
+      body: [[
+        { content: `Turno: ${turno}`, styles: { fontStyle: 'normal', fontSize: 8, valign: 'top' } },
+        { content: `Fecha: ${fecha}`, styles: { fontStyle: 'normal', fontSize: 8, halign: 'right', valign: 'top' } },
+      ]],
+      startY: doc.lastAutoTable.finalY,
+      margin: { left: 14, right: 14 },
+      styles: { lineColor: [0, 0, 0], lineWidth: 0.3, cellPadding: 2 },
+      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 50 } },
+      theme: 'grid',
+    });
+  } else if (meta) {
     autoTable(doc, {
       body: [[
         { content: `Planillero: ${planillero}\nTurno: ${turno}`, styles: { fontStyle: 'normal', fontSize: 8, valign: 'top' } },
@@ -182,7 +210,9 @@ function encabezadoInstitucion(doc, cabecera) {
 function pieFirmas(doc, cabecera, startY) {
   const tipo = cabecera?.tipo_reporte ?? '';
   const meta = FORMATO_META[tipo] ?? null;
-  const planillero = (cabecera?.creado_por_nombre ?? '').toUpperCase();
+  const esSaneamiento = tipo === 'SANEAMIENTO';
+  const planilleroRaw = cabecera?.creado_por_nombre ?? '';
+  const planillero = esSaneamiento ? planilleroRaw : planilleroRaw.toUpperCase();
   let y = startY != null ? startY : (doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 230);
 
   doc.setFontSize(8);
@@ -222,7 +252,8 @@ function pieFirmas(doc, cabecera, startY) {
   doc.line(14, y, 84, y);
   doc.line(126, y, 196, y);
   doc.setFontSize(8);
-  doc.text(`PLANILLERO: ${planillero}`, 49, y + 5, { align: 'center' });
+  const firmaIzq = esSaneamiento ? `Supervisor: ${planillero}` : `PLANILLERO: ${planillero}`;
+  doc.text(firmaIzq, 49, y + 5, { align: 'center' });
   doc.text('PRODUCCIÓN', 161, y + 5, { align: 'center' });
 }
 
@@ -245,7 +276,9 @@ function pdfLineas(cabecera, contenido, tipo) {
     body: lineas.map((l, i) => [
       i + 1,
       l.trabajador_codigo ?? '—',
-      (l.trabajador_nombre ?? '—').toUpperCase(),
+      esSaneamiento
+        ? (l.trabajador_nombre ?? '—')
+        : (l.trabajador_nombre ?? '—').toUpperCase(),
       fmtHora(l.hora_inicio),
       fmtHora(l.hora_fin),
       l.horas != null ? Number(l.horas).toFixed(1) : '0.0',
@@ -255,7 +288,7 @@ function pdfLineas(cabecera, contenido, tipo) {
     ]),
     startY,
     margin: { left: 14, right: 14 },
-    styles:     { fontSize: 8, cellPadding: meta ? 1.4 : 2, lineColor: [100, 116, 139], lineWidth: 0.2 },
+    styles:     { fontSize: 8, cellPadding: meta ? 1.4 : 2, lineColor: esSaneamiento ? [0, 0, 0] : [100, 116, 139], lineWidth: 0.2 },
     headStyles: { fillColor: [255, 255, 255], textColor: [30, 41, 59], fontStyle: 'bold', lineWidth: 0.3, halign: 'center' },
     columnStyles: {
       0: { cellWidth: 8,  halign: 'center' },
