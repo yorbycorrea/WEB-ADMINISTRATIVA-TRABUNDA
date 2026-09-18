@@ -10,7 +10,7 @@ import {
   apiGetTrabundaDashboard, apiGetTrabundaReportes, apiGetTrabundaReporteDetalle,
   apiCrearUsuarioTrabunda, apiGetUsuariosTrabunda,
 } from '../api/gateway';
-import { exportToPDF, exportToExcel, exportReporteDetallePDF, exportReporteDetalleExcel } from '../utils/exportUtils';
+import { exportToPDF, exportToExcel, exportReporteDetallePDF, exportReporteDetalleExcel, previewReporteDetallePDF } from '../utils/exportUtils';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -264,6 +264,28 @@ function TabReportes() {
   // ID del reporte descargando (null = ninguno)
   const [descargando,      setDescargando]      = useState(null); // PDF
   const [descargandoExcel, setDescargandoExcel] = useState(null); // Excel
+  // Vista previa de PDF: { id, url, cabecera, contenido, tipo } | null
+  const [preview,        setPreview]        = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(null); // ID en carga
+
+  async function abrirPreview(reporte) {
+    setPreviewLoading(reporte.id);
+    try {
+      const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
+      const url = previewReporteDetallePDF(detalle.cabecera, detalle.contenido, detalle.tipo);
+      setPreview({ id: reporte.id, url, cabecera: detalle.cabecera, contenido: detalle.contenido, tipo: detalle.tipo });
+    } catch (err) {
+      console.error('Error generando vista previa:', err);
+      alert('Error: ' + (err?.message ?? 'No se pudo generar la vista previa'));
+    } finally {
+      setPreviewLoading(null);
+    }
+  }
+
+  function cerrarPreview() { setPreview(null); }
+
+  // Libera el blob URL al cerrar la vista previa o desmontar el componente
+  useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview]);
 
   async function cargar({ f = fecha, t = tipo, tu = turno, search = q, p = 1 } = {}) {
     setLoading(true);
@@ -434,6 +456,19 @@ function TabReportes() {
                     {/* Botones de descarga individual */}
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex gap-1.5">
+                        {/* Vista previa */}
+                        <button
+                          disabled={previewLoading === reporte.id}
+                          onClick={() => abrirPreview(reporte)}
+                          title={`Vista previa #${reporte.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-all disabled:opacity-50"
+                        >
+                          {previewLoading === reporte.id
+                            ? <RefreshCw size={11} className="animate-spin" />
+                            : <Eye size={11} />
+                          }
+                          Ver
+                        </button>
                         {/* Excel */}
                         <button
                           disabled={descargandoExcel === reporte.id}
@@ -511,6 +546,52 @@ function TabReportes() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Modal de vista previa del PDF */}
+      {preview && (
+        <PreviewModal
+          preview={preview}
+          onClose={cerrarPreview}
+          onDownload={() => exportReporteDetallePDF(preview.cabecera, preview.contenido, preview.tipo)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Modal: Vista previa de reporte (PDF) ─────────────────────────────────────
+function PreviewModal({ preview, onClose, onDownload }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <FileText size={16} className="text-blue-600" />
+            <h3 className="font-bold text-slate-700">Vista previa · Reporte #{preview.id}</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onDownload}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all"
+            >
+              <Download size={13} /> Descargar
+            </button>
+            <button
+              onClick={onClose}
+              title="Cerrar"
+              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-all"
+            >
+              <XCircle size={18} />
+            </button>
+          </div>
+        </div>
+        <iframe
+          title={`Vista previa reporte ${preview.id}`}
+          src={preview.url}
+          className="flex-1 w-full border-0"
+        />
       </div>
     </div>
   );

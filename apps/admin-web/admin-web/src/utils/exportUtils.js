@@ -257,8 +257,16 @@ function pieFirmas(doc, cabecera, startY) {
   doc.text('PRODUCCIÓN', 161, y + 5, { align: 'center' });
 }
 
+// Finaliza el documento: lo descarga ('save') o devuelve un blob URL ('bloburl')
+// para previsualizarlo en pantalla sin descargar.
+function finalizePdf(doc, filename, mode) {
+  if (mode === 'bloburl') return doc.output('bloburl');
+  doc.save(filename);
+  return null;
+}
+
 // ─── PDF: APOYO_HORAS y SANEAMIENTO ──────────────────────────────────────────
-function pdfLineas(cabecera, contenido, tipo) {
+function pdfLineas(cabecera, contenido, tipo, mode = 'save') {
   const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const lineas = contenido?.items ?? [];
   const esSaneamiento = tipo === 'SANEAMIENTO';
@@ -320,11 +328,11 @@ function pdfLineas(cabecera, contenido, tipo) {
   if (typeof doc.putTotalPages === 'function') {
     doc.putTotalPages(TOTAL_PAGES_EXP);
   }
-  doc.save(`trabunda-reporte-${cabecera.id}-${cabecera.tipo_reporte}.pdf`);
+  return finalizePdf(doc, `trabunda-reporte-${cabecera.id}-${cabecera.tipo_reporte}.pdf`, mode);
 }
 
 // ─── PDF: TRABAJO_AVANCE ──────────────────────────────────────────────────────
-function pdfTrabajoAvance(cabecera, contenido) {
+function pdfTrabajoAvance(cabecera, contenido, mode = 'save') {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   encabezadoInstitucion(doc, cabecera);
 
@@ -374,11 +382,11 @@ function pdfTrabajoAvance(cabecera, contenido) {
   }
 
   pieFirmas(doc, cabecera);
-  doc.save(`trabunda-reporte-${cabecera.id}-TRABAJO_AVANCE.pdf`);
+  return finalizePdf(doc, `trabunda-reporte-${cabecera.id}-TRABAJO_AVANCE.pdf`, mode);
 }
 
 // ─── PDF: CONTEO_RAPIDO ───────────────────────────────────────────────────────
-function pdfConteoRapido(cabecera, contenido) {
+function pdfConteoRapido(cabecera, contenido, mode = 'save') {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const cab = contenido?.reporte ?? cabecera;
   encabezadoInstitucion(doc, cab);
@@ -401,23 +409,29 @@ function pdfConteoRapido(cabecera, contenido) {
   });
 
   pieFirmas(doc, cab);
-  doc.save(`trabunda-reporte-${cab.id}-CONTEO_RAPIDO.pdf`);
+  return finalizePdf(doc, `trabunda-reporte-${cab.id}-CONTEO_RAPIDO.pdf`, mode);
 }
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
-export function exportReporteDetallePDF(cabecera, contenido, tipo) {
+// mode: 'save' (descarga, por defecto) | 'bloburl' (devuelve URL para previsualizar)
+export function exportReporteDetallePDF(cabecera, contenido, tipo, mode = 'save') {
   if (!cabecera) throw new Error('Sin datos de cabecera del reporte');
   switch (tipo) {
     case 'APOYO_HORAS':
     case 'SANEAMIENTO':
-      return pdfLineas(cabecera, contenido, tipo);
+      return pdfLineas(cabecera, contenido, tipo, mode);
     case 'TRABAJO_AVANCE':
-      return pdfTrabajoAvance(cabecera, contenido);
+      return pdfTrabajoAvance(cabecera, contenido, mode);
     case 'CONTEO_RAPIDO':
-      return pdfConteoRapido(cabecera, contenido);
+      return pdfConteoRapido(cabecera, contenido, mode);
     default:
-      return pdfLineas(cabecera, contenido);
+      return pdfLineas(cabecera, contenido, undefined, mode);
   }
+}
+
+// Devuelve un blob URL del PDF para previsualizarlo (sin descargar).
+export function previewReporteDetallePDF(cabecera, contenido, tipo) {
+  return exportReporteDetallePDF(cabecera, contenido, tipo, 'bloburl');
 }
 
 // ─── Excel detalle individual ─────────────────────────────────────────────────
