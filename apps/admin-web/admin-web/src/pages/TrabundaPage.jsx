@@ -1023,7 +1023,7 @@ export default function TrabundaPage() {
       title="Trabunda"
       subtitle={lastUpdate ? `Actualizado: ${lastUpdate}` : 'App móvil de gestión operativa'}
     >
-      <div className="space-y-6 max-w-[1200px]">
+      <div className="space-y-6 w-full">
 
         {/* ── Tabs + Refresh ─────────────────────────────────────── */}
         <div className="flex items-center justify-between">
