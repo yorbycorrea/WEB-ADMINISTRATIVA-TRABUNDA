@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login       from './pages/Login';
 import Dashboard   from './pages/Dashboard';
 import TrabundaPage from './pages/TrabundaPage';
+import CorregirReportePage from './pages/CorregirReportePage';
 import RutasPage    from './pages/RutasPage';
 import CalidadPage  from './pages/CalidadPage';
 import GuantesPage  from './pages/GuantesPage';
@@ -28,6 +29,11 @@ export default function App() {
           <Route path="/trabunda" element={
             <ProtectedRoute permission="trabunda">
               <TrabundaPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/trabunda/mis-reportes/:id/corregir" element={
+            <ProtectedRoute permission="trabunda">
+              <CorregirReportePage />
             </ProtectedRoute>
           } />
 

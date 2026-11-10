@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, Clock, Users, FileText, CheckCircle, XCircle,
   AlertCircle, Database, Search, ChevronLeft, ChevronRight,
@@ -265,6 +266,7 @@ function fmtFecha(val) {
 // ─── Tab: Reportes ────────────────────────────────────────────────────────────
 
 function TabReportes() {
+  const navigate = useNavigate();
   const [fecha,   setFecha]   = useState(hoy());
   const [tipo,    setTipo]    = useState('');
   const [turno,   setTurno]   = useState('');
@@ -296,7 +298,25 @@ function TabReportes() {
     }
   }
 
+  const [corrigiendo, setCorrigiendo] = useState(null);
+  const [corrigiendoLoading, setCorrigiendoLoading] = useState(null);
+
   function cerrarPreview() { setPreview(null); }
+
+  async function abrirCorrecion(reporte) {
+    setCorrigiendoLoading(reporte.id);
+    try {
+      const detalle = await apiGetTrabundaReporteDetalle(reporte.id);
+      const lineas = detalle?.contenido?.items ?? [];
+      setCorrigiendo({reporte, lineas});
+    } catch (err) {
+      console.error('Error cargando reporte para correción:', err);
+      alert('Error: ' + (err?.message ?? 'No se pudo cargar el reporte'));
+    } finally {
+      setCorrigiendoLoading(null);
+    }
+  }
+  function cerrarCorrecion() { setCorrigiendo(null);}
 
   // Libera el blob URL al cerrar la vista previa o desmontar el componente
   useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview]);
@@ -535,11 +555,16 @@ function TabReportes() {
                           PDF
                         </button>
                         <button
-                          onClick={() => alert(`TODO: abrir pantalla de correcion del reporte #${reporte.id}`)}
+                          disabled={corrigiendoLoading === reporte.id}
+                          onClick={() => navigate(`/trabunda/mis-reportes/${reporte.id}/corregir`)}
                           title={`Corregir  reporte #${reporte.id}`}
                           className='inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all'
                           >
-                            <Pencil size={11}/>
+                            {corrigiendoLoading === reporte.id
+                              ? <RefreshCw size={11} className='animate-spin'/>
+                              : <Pencil size={11}/>
+                            }
+                            
                             Corregir
 
                         </button>
@@ -582,6 +607,10 @@ function TabReportes() {
           onDownload={() => exportReporteDetallePDF(preview.cabecera, preview.contenido, preview.tipo)}
         />
       )}
+
+      {corrigiendo && (
+        <PanelCorrecion corrigiendo={corrigiendo} onClose={cerrarCorrecion}/>
+      )}
     </div>
   );
 }
@@ -622,6 +651,9 @@ function PreviewModal({ preview, onClose, onDownload }) {
     </div>
   );
 }
+
+
+
 
 // ─── Modal: Crear usuario Trabunda ────────────────────────────────────────────
 
