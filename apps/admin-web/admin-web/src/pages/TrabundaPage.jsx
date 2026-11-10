@@ -3,6 +3,7 @@ import {
   RefreshCw, Clock, Users, FileText, CheckCircle, XCircle,
   AlertCircle, Database, Search, ChevronLeft, ChevronRight,
   Download, Plus, Eye, EyeOff, Shield, UserPlus, Copy, Check,
+  Pencil,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -222,6 +223,7 @@ const COLUMNAS = [
   { key: 'creado_por_nombre', label: 'Creador',     width: 'w-40'   },
   { key: 'estado',            label: 'Estado',      width: 'w-24'   },
   { key: 'observaciones',     label: 'Observaciones', width: 'w-52' },
+  { key: 'version',           label: 'Version',     width: 'w-52'   },
   { key: 'creado_en',         label: 'Creado',      width: 'w-36'   },
 ];
 
@@ -237,6 +239,18 @@ function EstadoBadge({ estado }) {
   if (!estado) return <span className="text-slate-300">—</span>;
   const cls = ESTADO_COLORS[estado?.toUpperCase()] ?? 'bg-slate-100 text-slate-600';
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>{estado}</span>;
+}
+
+function VersionBadge({ version, corregido}) {
+  const v = version ?? 1;
+  if (!corregido) {
+    return (
+    <span className='text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700'>
+      v{v} . corregido
+
+    </span>
+    );
+  }
 }
 
 function fmtFecha(val) {
@@ -314,6 +328,9 @@ function TabReportes() {
     const val = reporte[col.key];
     if (col.key === 'tipo_reporte') return <TipoBadge tipo={val} />;
     if (col.key === 'estado')       return <EstadoBadge estado={val} />;
+    if (col.key === 'version') {
+      return <VersionBadge version={val} corregido={Number(val) > 1} />;
+    }
     if (col.key === 'fecha' || col.key === 'creado_en') return <span className="text-slate-600">{fmtFecha(val)}</span>;
     if (col.key === 'observaciones') return <span className="text-slate-500 text-xs truncate block max-w-[200px]" title={val ?? ''}>{val || '—'}</span>;
     if (col.key === 'turno') {
@@ -516,6 +533,15 @@ function TabReportes() {
                             : <Download size={11} />
                           }
                           PDF
+                        </button>
+                        <button
+                          onClick={() => alert(`TODO: abrir pantalla de correcion del reporte #${reporte.id}`)}
+                          title={`Corregir  reporte #${reporte.id}`}
+                          className='inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all'
+                          >
+                            <Pencil size={11}/>
+                            Corregir
+
                         </button>
                       </div>
                     </td>
