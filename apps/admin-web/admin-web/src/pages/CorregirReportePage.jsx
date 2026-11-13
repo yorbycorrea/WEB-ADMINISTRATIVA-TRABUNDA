@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Search, Plus, Trash2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
@@ -77,6 +77,7 @@ export default function CorregirReportePage() {
   const [errorBusquedaModal, setErrorBusquedaModal] = useState(null);
   const [resultadoBusqueda, setResultadoBusqueda] = useState(null);
   const [guardando,    setGuardando]    = useState(false);
+  const guardandoRef = useRef(false);
 
   useEffect(() => {
     let activo = true;
@@ -209,6 +210,8 @@ export default function CorregirReportePage() {
   const todosConMotivo = cambiosPendientes.length > 0 && cambiosPendientes.every((r) => Boolean(motivos[r.id]));
 
   async function handleGuardar() {
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
     setGuardando(true);
     try {
       const cambios = cambiosPendientes.map((r) => {
@@ -257,6 +260,7 @@ export default function CorregirReportePage() {
     } catch (err) {
       alert('Error de red: ' + err.message);
     } finally {
+      guardandoRef.current = false;
       setGuardando(false);
     }
   }
