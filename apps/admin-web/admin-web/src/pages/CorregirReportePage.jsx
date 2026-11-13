@@ -3,15 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Search, Plus, Trash2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { apiGetTrabundaReporteDetalle, apiGetTrabundaDashboard } from '../api/gateway';
-
-// TODO: reemplazar por una búsqueda real de trabajadores
-
-const MOCK_TRABAJADORES_DISPONIBLES = [
-  { codigo: '35700', nombre: 'CONTRERAS FERNANDEZ ERICSON', documento: '71234567' },
-  { codigo: '40112', nombre: 'QUIROZ SALDAÑA MELANY',        documento: '72345678' },
-  { codigo: '41987', nombre: 'VASQUEZ TORRES BRAYAN',        documento: '73456789' },
-];
+import { apiGetTrabundaReporteDetalle, apiGetTrabundaDashboard, apiCorregirReporte, apiLookupTrabajador } from '../api/gateway';
+import { calcularPlazo } from '../utils/plazoCorreccion';
 
 const MOTIVOS_EDITADO  = ['Error de digitación', 'Olvidé marcar la hora de salida', 'Error en hora de marcación', 'Otro'];
 const MOTIVOS_AGREGADO = ['Olvidé registrar al trabajador', 'Trabajador llegó tarde', 'Otro'];
@@ -62,17 +55,7 @@ function diffFila(row) {
   return partes;
 }
 
-function calcularPlazo(cabecera) {
-  if (cabecera.estado === 'ABIERTO') return 'Edición libre (abierto, igual queda auditado)';
-  if (!cabecera.cerrado_en) return '—';
-  const cierre = new Date(cabecera.cerrado_en);
-  // TODO: 48h hardcodeado — en la Fase 1 esto sale de una tabla de configuración.
-  const limite = new Date(cierre.getTime() + 48 * 60 * 60 * 1000);
-  const vencido = new Date() > limite;
-  const fecha = limite.toLocaleDateString('es-PE');
-  const hora  = limite.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-  return vencido ? 'Vencido — solo un supervisor puede corregir' : `Puedes corregir hasta el ${fecha} a las ${hora}`;
-}
+
 
 export default function CorregirReportePage() {
   const { id } = useParams();
@@ -90,6 +73,9 @@ export default function CorregirReportePage() {
   const [comentario,   setComentario]   = useState('');
   const [modalAgregar, setModalAgregar] = useState(false);
   const [busquedaModal, setBusquedaModal] = useState('');
+  const [buscandoTrabajador, setBuscandoTrabajador] = useState(false);
+  const [errorBusquedaModal, setErrorBusquedaModal] = useState(null);
+  const [resultadoBusqueda, setResultadoBusqueda] = useState(null);
   const [guardando,    setGuardando]    = useState(false);
 
   useEffect(() => {
@@ -123,7 +109,7 @@ export default function CorregirReportePage() {
           },
         })));
         const listaAreas = dashboard?.areas?.areas ?? dashboard?.areas?.data ?? [];
-        setAreas(listaAreas.map((a) => a.nombre).filter(Boolean));
+        setAreas(listaAreas.filter((a) => a?.id != null && a?.nombre));
       } catch (e) {
         if (activo) setError(e.message);
       } finally {
@@ -146,7 +132,13 @@ export default function CorregirReportePage() {
   }
 
   function alternarQuitar(rowId) {
-    setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, quitar: !r.quitar } : r)));
+    setRows ((prev) => {
+      const fila = prev.find((r) => r.id === rowId);
+      if (fila && !fila.original) {
+        return prev.filter((r) => r.id !== rowId);
+      }
+      return prev.map((r) => (r.id === rowId ? { ...r, quitar: !r.quitar} : r));
+    });
   }
 
   function agregarTrabajador(candidato) {
@@ -155,8 +147,8 @@ export default function CorregirReportePage() {
       codigo: candidato.codigo,
       nombre: candidato.nombre,
       documento: candidato.documento,
-      area_id: null,
-      area_nombre: areas[0] ?? '',
+      area_id: areas[0]?.id ?? null,
+      area_nombre: areas[0]?.nombre ?? '',
       hora_inicio: '',
       hora_fin: '',
       horas: null,
@@ -165,6 +157,31 @@ export default function CorregirReportePage() {
     }]);
     setModalAgregar(false);
     setBusquedaModal('');
+  }
+
+  async function buscarTrabajador(e) {
+    e.preventDefault();
+    const q = busquedaModal.trim();
+    if (!q) return;
+    setBuscandoTrabajador(true);
+    setErrorBusquedaModal(null);
+    setResultadoBusqueda(null);
+    try {
+      const data = await apiLookupTrabajador(q);
+      if (data?.error) {
+        setErrorBusquedaModal(
+          data.error === 'TRABAJADOR_NO_ENCONTRADO'
+            ? 'No se encontró ningún trabajador con ese código o DNI.'
+            : data.error
+        );
+        return;
+      }
+      setResultadoBusqueda(data.worker);
+    } catch (err) {
+      setErrorBusquedaModal(err.message ?? 'Error de red buscando trabajador');
+    } finally {
+      setBuscandoTrabajador(false);
+    }
   }
 
   const filas = useMemo(() => rows.map((r) => ({ ...r, estado: estadoFilaDe(r) })), [rows]);
@@ -192,9 +209,51 @@ export default function CorregirReportePage() {
   async function handleGuardar() {
     setGuardando(true);
     try {
-      // TODO: falta el endpoint PATCH /reportes/:id/correccion en Trabunda_Backend
-      // (Fase 2: duplicados, recálculo de horas, version, auditoría, notificación).
-      alert('TODO: el backend todavía no tiene el endpoint de guardado.');
+      const cambios = cambiosPendientes.map((r) => {
+        if (r.estado === 'NUEVO') {
+          return {
+            tipo: 'AGREGAR',
+            trabajador_codigo: r.codigo,
+            area_id: r.area_id,
+            hora_inicio: r.hora_inicio,
+            hora_fin: r.hora_fin,
+            motivo_tipo: motivos[r.id],
+          };
+        }
+        if (r.estado === 'QUITAR'){
+          return { tipo: 'QUITAR', linea_id: r.id, motivo_tipo: motivos[r.id]};
+        }
+        return {
+          tipo: 'EDITAR',
+          linea_id : r.id,
+          area_id: r.area_id,
+          hora_inicio: r.hora_inicio,
+          hora_fin: r.hora_fin,
+          motivo_tipo: motivos[r.id],
+
+        };
+      });
+
+      const resultado = await apiCorregirReporte(cabecera.id, {
+        version: versionActual,
+        comentario_general: comentario || undefined,
+        cambios,
+      });
+      if (resultado?.ok === false || resultado?.error){
+        if (resultado?.code === 'VERSION_CONFLICT'){
+          alert(`Alguien más corrigió este reporte mientras tanto (ahora va en v${resultado.version_actual}). Recarga la página e inténtalo de nuevo. `);
+        }else {
+          alert('Error: ' + resultado.error);
+        }
+        return;
+      }
+      if (resultado.advertencias?.length){
+        alert('Guardado con advertencias:\n' + resultado.advertencias.map((a) => `- ${a.mensaje}`).join('\n'));
+      }
+
+      navigate('/trabunda/mis-reportes');
+    } catch (err) {
+      alert('Error de red: ' + err.message);
     } finally {
       setGuardando(false);
     }
@@ -243,7 +302,7 @@ export default function CorregirReportePage() {
         </div>
 
         <p className="text-sm text-slate-400">
-          Turno {cabecera.turno} · {cabecera.fecha} · {calcularPlazo(cabecera)}
+          Turno {cabecera.turno} · {cabecera.fecha} · {calcularPlazo(cabecera).texto}
         </p>
 
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-center gap-2 text-sm text-emerald-700">
@@ -270,7 +329,12 @@ export default function CorregirReportePage() {
                   ` · ${filas.filter((r) => r.estado === 'QUITAR').length} por quitar`}
               </span>
               <button
-                onClick={() => setModalAgregar(true)}
+                onClick={() => {
+                  setModalAgregar(true);
+                  setBusquedaModal('');
+                  setResultadoBusqueda(null);
+                  setErrorBusquedaModal(null);
+                }}
                 className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all whitespace-nowrap"
               >
                 <Plus size={14} /> Agregar trabajador
@@ -317,11 +381,17 @@ export default function CorregirReportePage() {
                       <td className="px-4 py-2.5">
                         <select
                           disabled={r.estado === 'QUITAR'}
-                          value={r.area_nombre ?? ''}
-                          onChange={(e) => actualizarFila(r.id, 'area_nombre', e.target.value)}
+                          value={r.area_id ?? ''}
+                          onChange={(e) => {
+                            const areaId = Number(e.target.value);
+                            const area = areas.find((a) => a.id === areaId);
+                            setRows((prev) => prev.map((row) => 
+                              row.id === r.id ? { ...row, area_id: areaId, area_nombre: area?.nombre ?? row.area_nombre} : row  
+                            ));
+                          }}                          
                           className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white disabled:bg-slate-100 disabled:text-slate-400"
                         >
-                          {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+                          {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-2.5">
@@ -467,49 +537,49 @@ export default function CorregirReportePage() {
                 <XCircle size={18} />
               </button>
             </div>
-            <div className="relative mb-3">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                autoFocus
-                value={busquedaModal}
-                onChange={(e) => setBusquedaModal(e.target.value)}
-                placeholder="Código, DNI o apellidos"
-                className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <p className="text-[10px] text-amber-600 mb-2">
-              Búsqueda de ejemplo — falta exponer el lookup real del maestro de trabajadores en el gateway (Fase 2).
-            </p>
-            <div className="space-y-1.5 max-h-60 overflow-y-auto">
-              {MOCK_TRABAJADORES_DISPONIBLES
-                .filter((t) =>
-                  !busquedaModal ||
-                  t.codigo.includes(busquedaModal) ||
-                  t.documento.includes(busquedaModal) ||
-                  t.nombre.toLowerCase().includes(busquedaModal.toLowerCase())
-                )
-                .map((t) => {
-                  const yaEsta = codigosYaEnReporte.has(t.codigo);
-                  return (
-                    <div key={t.codigo} className="flex items-center justify-between p-2.5 border border-slate-100 rounded-xl">
-                      <div>
-                        <div className="text-sm text-slate-800">{t.nombre}</div>
-                        <div className="text-xs text-slate-400">{t.codigo} · DNI {t.documento}</div>
-                      </div>
-                      {yaEsta ? (
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-500">en reporte</span>
-                      ) : (
-                        <button
-                          onClick={() => agregarTrabajador(t)}
-                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Agregar
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
+            <form onSubmit={buscarTrabajador} className="flex gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  autoFocus
+                  value={busquedaModal}
+                  onChange={(e) => setBusquedaModal(e.target.value)}
+                  placeholder="Código o DNI"
+                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button type="submit" disabled={buscandoTrabajador || !busquedaModal.trim()}
+                className="px-4 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                {buscandoTrabajador ? <RefreshCw size={14} className="animate-spin" /> : 'Buscar'}
+              </button>
+            </form>
+
+            {errorBusquedaModal && (
+              <p className="text-xs text-red-500 mb-2">{errorBusquedaModal}</p>
+            )}
+
+            {resultadoBusqueda && (
+              <div className="flex items-center justify-between p-2.5 border border-slate-100 rounded-xl">
+                <div>
+                  <div className="text-sm text-slate-800">{resultadoBusqueda.nombre}</div>
+                  <div className="text-xs text-slate-400">{resultadoBusqueda.codigo} · DNI {resultadoBusqueda.dni ?? '—'}</div>
+                </div>
+                {codigosYaEnReporte.has(resultadoBusqueda.codigo) ? (
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-500">en reporte</span>
+                ) : (
+                  <button
+                    onClick={() => agregarTrabajador({
+                      codigo: resultadoBusqueda.codigo,
+                      nombre: resultadoBusqueda.nombre,
+                      documento: resultadoBusqueda.dni,
+                    })}
+                    className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Agregar
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

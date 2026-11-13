@@ -4,7 +4,7 @@ import {
   RefreshCw, Clock, Users, FileText, CheckCircle, XCircle,
   AlertCircle, Database, Search, ChevronLeft, ChevronRight,
   Download, Plus, Eye, EyeOff, Shield, UserPlus, Copy, Check,
-  Pencil,
+  Pencil, History,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -564,9 +564,17 @@ function TabReportes() {
                               ? <RefreshCw size={11} className='animate-spin'/>
                               : <Pencil size={11}/>
                             }
-                            
+
                             Corregir
 
+                        </button>
+                        <button
+                          onClick={() => navigate(`/trabunda/reportes/${reporte.id}/historial`)}
+                          title={`Historial del reporte #${reporte.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-all"
+                        >
+                          <History size={11} />
+                          Historial
                         </button>
                       </div>
                     </td>

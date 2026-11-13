@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
   // Útil para redirigir después del login.
   function getHomePage() {
     if (user?.role === 'superadmin') return '/';
+    if (hasPermission('trabunda_planillero')) return '/trabunda/mis-reportes';
     if (hasPermission('overview'))  return '/';
     if (hasPermission('trabunda'))  return '/trabunda';
     if (hasPermission('rutas'))     return '/rutas';

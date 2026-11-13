@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Activity, Settings,
-  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical, Moon, Sun, Hand
+  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical, Moon, Sun, Hand, Bell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiGetNotificaciones, apiGetNotificacionesNoLeidasCount, apiMarcarNotificacionLeida } from '../api/gateway';
 
 // Ícono SVG simple para la app de Trabunda (trabajadores)
 function TrabundaIcon({ size = 20 }) {
@@ -64,6 +65,51 @@ export default function Layout({ children, title, subtitle }) {
   function handleLogout() {
     logout();
     navigate('/login');
+  }
+
+  // Centro de notificaciones — solo para staff de Trabunda, no para planilleros
+  const vePlanillas = hasPermission('trabunda') && !hasPermission('trabunda_planillero');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifPanel, setNotifPanel] = useState(false);
+  const [notificaciones, setNotificaciones] = useState([]);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+
+  useEffect(() => {
+    if (!vePlanillas) return;
+    async function cargarCount() {
+      try {
+        const data = await apiGetNotificacionesNoLeidasCount();
+        setUnreadCount(data?.no_leidas ?? 0);
+      } catch (_) {}
+    }
+    cargarCount();
+    const interval = setInterval(cargarCount, 60_000);
+    return () => clearInterval(interval);
+  }, [vePlanillas]);
+
+  async function abrirNotificaciones() {
+    const abriendo = !notifPanel;
+    setNotifPanel(abriendo);
+    if (abriendo) {
+      setLoadingNotifs(true);
+      try {
+        const data = await apiGetNotificaciones();
+        setNotificaciones(data?.items ?? []);
+      } catch (_) {
+        setNotificaciones([]);
+      } finally {
+        setLoadingNotifs(false);
+      }
+    }
+  }
+
+  async function handleClickNotificacion(n) {
+    try {
+      await apiMarcarNotificacionLeida(n.id);
+    } catch (_) {}
+    setNotifPanel(false);
+    if (!n.leida) setUnreadCount((c) => Math.max(c - 1, 0));
+    navigate(`/trabunda/reportes/${n.reporte_id}/historial`);
   }
 
   return (
@@ -137,6 +183,52 @@ export default function Layout({ children, title, subtitle }) {
             {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
           </div>
           <div className="flex items-center gap-3">
+            {vePlanillas && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={abrirNotificaciones}
+                  className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center relative"
+                  aria-label="Notificaciones"
+                >
+                  <Bell size={18} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {notifPanel && (
+                  <div className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100 font-bold text-sm text-slate-700">
+                      Notificaciones
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {loadingNotifs ? (
+                        <div className="p-6 text-center text-slate-400 text-sm">Cargando...</div>
+                      ) : notificaciones.length === 0 ? (
+                        <div className="p-6 text-center text-slate-400 text-sm">Sin notificaciones</div>
+                      ) : (
+                        notificaciones.map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => handleClickNotificacion(n)}
+                            className={`w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-all ${!n.leida ? 'bg-blue-50/50' : ''}`}
+                          >
+                            <p className="text-sm font-semibold text-slate-800">{n.titulo}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.cuerpo}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              {new Date(n.created_at).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                            </p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setTheme(isDark ? 'light' : 'dark')}

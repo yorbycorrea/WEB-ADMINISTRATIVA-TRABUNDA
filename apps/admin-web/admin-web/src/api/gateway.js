@@ -177,6 +177,40 @@ export function apiGetTrabundaReporteDetalle(id) {
   return apiFetch(`/dashboard/trabunda/reportes/${id}/detalle`);
 }
 
+export function apiCorregirReporte(id, payload){
+  return apiFetch(`/dashboard/trabunda/reportes/${id}/correccion`,{
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function apiLookupTrabajador(q) {
+  return apiFetch(`/dashboard/trabunda/trabajadores/lookup?q=${encodeURIComponent(q)}`);
+}
+
+export function apiGetHistorialReporte(id) {
+  return apiFetch(`/dashboard/trabunda/reportes/${id}/historial`);
+}
+
+export function apiRestaurarLinea(lineaId, motivoTexto) {
+  return apiFetch(`/dashboard/trabunda/lineas/${lineaId}/restaurar`, {
+    method: 'PATCH',
+    body: JSON.stringify({ motivo_texto: motivoTexto }),
+  });
+}
+
+export function apiGetNotificaciones({ page = 1, limit = 20 } = {}) {
+  return apiFetch(`/dashboard/trabunda/notificaciones?page=${page}&limit=${limit}`);
+}
+
+export function apiGetNotificacionesNoLeidasCount() {
+  return apiFetch('/dashboard/trabunda/notificaciones/no-leidas/count');
+}
+
+export function apiMarcarNotificacionLeida(id) {
+  return apiFetch(`/dashboard/trabunda/notificaciones/${id}/leer`, { method: 'PATCH' });
+}
+
 // ─── Admin Trabunda (solo superadmin) ────────────────────────────────────────
 
 // Lista todos los usuarios del backend de Trabunda (pickers con todos los roles)

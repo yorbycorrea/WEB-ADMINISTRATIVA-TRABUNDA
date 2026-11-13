@@ -7,6 +7,7 @@ import { Buffer } from "node:buffer";
 import { initDB } from "./db/index.js";
 import { getTrabundaToken, getRutasToken, getCalidadToken, getGuantesToken, invalidateToken } from "./services/serviceAuth.js";
 import { getAllUsers, verifyUser, createUser, updateUser, deleteUser } from "./services/userStore.js";
+import { guardarSesionPlanillero, obtenerTokenPlanillero } from "./services/planilleroSession.js";
 
 const app        = express();
 const PORT       = process.env.GATEWAY_PORT || 3000;
@@ -90,6 +91,17 @@ async function fetchService(getToken, invalidateName, url, options = {}) {
   return res.json();
 }
 
+// Si el usuario logueado es un planillero con sesión real de Trabunda, usamos
+// SU token. Si no (staff/superadmin viendo el dashboard), usamos la cuenta
+// de servicio de siempre.
+async function getTrabundaTokenForRequest(req) {
+  if (req.user?.trabundaUsername) {
+    const tokenReal = obtenerTokenPlanillero(req.user.trabundaUsername);
+    if (tokenReal) return tokenReal;
+  }
+  return getTrabundaToken();
+}
+
 function normalizeCalidadOcrEstado(data) {
   const status = String(data?.status ?? "").toLowerCase();
   const online = data?.online === true || data?.activo === true || status === "ok" || status === "online";
@@ -124,20 +136,58 @@ app.post("/auth/login", async (req, res) => {
       permissions: ["overview", "trabunda", "rutas", "calidad", "guantes", "users"] } });
   }
 
-  // 2. ¿Es un usuario registrado en users.json?
+  // 2. ¿Es un usuario del staff, registrado en Postgres?
   try {
     const user = await verifyUser(username, password);
-    if (!user) return res.status(401).json({ error: "Credenciales incorrectas" });
-
-    const token = jwt.sign(
-      { username: user.username, role: "operator", permissions: user.permissions, id: user.id },
-      JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
-    );
-    return res.json({ token, user: { ...user, role: "operator" } });
+    if (user) {
+      const token = jwt.sign(
+        { username: user.username, role: "operator", permissions: user.permissions, id: user.id },
+        JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
+      );
+      return res.json({ token, user: { ...user, role: "operator" } });
+    }
   } catch (err) {
     return res.status(500).json({ error: "Error interno al verificar credenciales" });
   }
+
+  // 3. ¿Es un planillero con sus credenciales reales de Trabunda_Backend
+  //    (las mismas que usa en la app móvil)?
+  const trabundaBase = process.env.TRABUNDA_BACKEND_URL;
+  if (trabundaBase) {
+    try {
+      const trabundaRes = await fetch(`${trabundaBase}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (trabundaRes.ok) {
+        const trabundaData = await trabundaRes.json();
+        const decoded = jwt.decode(trabundaData.token);
+        const roles = decoded?.roles ?? [];
+        if (trabundaData.token && roles.includes("PLANILLERO")) {
+          const expiresInMs = decoded?.exp ? decoded.exp * 1000 - Date.now() : 7 * 60 * 60 * 1000;
+          guardarSesionPlanillero(username, trabundaData.token, decoded, expiresInMs);
+
+          const permissions = ["trabunda", "trabunda_planillero"];
+          const token = jwt.sign(
+            { username, role: "operator", permissions, trabundaUsername: username },
+            JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
+          );
+          return res.json({
+            token,
+            user: { username, role: "operator", displayName: decoded?.nombre ?? username, permissions },
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[auth] Error intentando login de planillero contra Trabunda:", err.message);
+      // no rompemos el login normal — seguimos al 401 de abajo
+    }
+  }
+
+  return res.status(401).json({ error: "Credenciales incorrectas" });
 });
 
 
@@ -356,7 +406,7 @@ app.get("/dashboard/trabunda/reportes", verifyToken, requirePermission("trabunda
     if (desde)   params.set("desde",   desde);
     if (hasta)   params.set("hasta",   hasta);
 
-    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes?${params}`);
+    const data = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes?${params}`);
 
     // El backend de Trabunda devuelve los registros en el campo "items"
     const reportes   = data?.items ?? [];
@@ -383,22 +433,169 @@ app.get("/dashboard/trabunda/reportes/:id/detalle", verifyToken, requirePermissi
     const { id } = req.params;
 
     // 1. Cabecera — igual para todos los tipos
-    const cabecera = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/${id}`);
+    const cabecera = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/${id}`);
     const tipo = cabecera.tipo_reporte;
 
     // 2. Contenido — cada tipo tiene su propio endpoint y estructura
     let contenido = null;
     if (tipo === "APOYO_HORAS" || tipo === "SANEAMIENTO") {
-      contenido = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/${id}/lineas`);
+      contenido = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/${id}/lineas`);
     } else if (tipo === "TRABAJO_AVANCE") {
-      contenido = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/trabajo-avance/${id}/resumen`);
+      contenido = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/trabajo-avance/${id}/resumen`);
     } else if (tipo === "CONTEO_RAPIDO") {
-      contenido = await fetchService(getTrabundaToken, "trabunda", `${base}/reportes/conteo-rapido/${id}`);
+      contenido = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/conteo-rapido/${id}`);
     }
 
     res.json({ cabecera, contenido, tipo });
   } catch (err) {
     res.status(502).json({ error: "No se pudo obtener el detalle del reporte", detail: err.message });
+  }
+});
+
+// _______CORREGIR REPORTE (requiere permiso "trabunda")______________-
+app.patch("/dashboard/trabunda/reportes/:id/correccion", verifyToken,
+requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER){
+    return res.status(503).json({ configured: false, ok: false});
+  }
+  try {
+    const {id} = req.params;
+    const data = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda",
+      `${base}/reportes/${id}/correccion`, {
+        method: "PATCH",
+        body: JSON.stringify(req.body),
+      }
+    );
+    res.json(data);
+  } catch (err){
+    console.error(`[Trabunda] Error corrigiendo reporte ${req.params.id}:`,
+      err.message, err.backendDetail ?? "");
+      if (err.backendStatus) {
+        return res.status(err.backendStatus).json({
+          ok: false,
+          error: err.backendDetail?.error ?? "El backend de Trabunda rechazó la corrección",
+          code: err.backendDetail?.code,
+          version_actual: err.backendDetail?.version_actual,
+        });
+      }
+      res.status(502).json({ ok: false, error: "No se pudo corregir el reporte",
+        detail: err.message
+      });
+  }
+}
+
+)
+
+// ─── BUSCAR TRABAJADOR POR CÓDIGO O DNI (requiere permiso "trabunda") ────────
+app.get("/dashboard/trabunda/trabajadores/lookup", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const q = encodeURIComponent(req.query.q ?? "");
+    const data = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/trabajadores/lookup?q=${q}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json(err.backendDetail ?? { error: err.message });
+    }
+    res.status(502).json({ error: "No se pudo buscar el trabajador", detail: err.message });
+  }
+});
+
+// ─── HISTORIAL DE UN REPORTE (requiere permiso "trabunda") ───────────────────
+app.get("/dashboard/trabunda/reportes/:id/historial", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const { id } = req.params;
+    const data = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/${id}/historial`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json(err.backendDetail ?? { error: err.message });
+    }
+    res.status(502).json({ error: "No se pudo obtener el historial", detail: err.message });
+  }
+});
+
+// ─── RESTAURAR UNA LÍNEA QUITADA (requiere permiso "trabunda") ───────────────
+app.patch("/dashboard/trabunda/lineas/:lineaId/restaurar", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false, ok: false });
+  }
+  try {
+    const { lineaId } = req.params;
+    const data = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/lineas/${lineaId}/restaurar`, {
+      method: "PATCH",
+      body: JSON.stringify(req.body),
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: err.backendDetail?.error ?? err.message, code: err.backendDetail?.code });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo restaurar la línea", detail: err.message });
+  }
+});
+
+// ─── NOTIFICACIONES A PLANILLAS (requiere permiso "trabunda") ────────────────
+app.get("/dashboard/trabunda/notificaciones", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const params = new URLSearchParams({
+      destino_rol: "PLANILLAS",
+      page: req.query.page || 1,
+      limit: req.query.limit || 20,
+    });
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/notificaciones?${params}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json(err.backendDetail ?? { error: err.message });
+    }
+    res.status(502).json({ error: "No se pudieron obtener las notificaciones", detail: err.message });
+  }
+});
+
+app.get("/dashboard/trabunda/notificaciones/no-leidas/count", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/notificaciones/no-leidas/count?destino_rol=PLANILLAS`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json(err.backendDetail ?? { error: err.message });
+    }
+    res.status(502).json({ error: "No se pudo contar notificaciones", detail: err.message });
+  }
+});
+
+app.patch("/dashboard/trabunda/notificaciones/:id/leer", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false, ok: false });
+  }
+  try {
+    const { id } = req.params;
+    const data = await fetchService(getTrabundaToken, "trabunda", `${base}/notificaciones/${id}/leer`, { method: "PATCH" });
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json({ ok: false, error: err.backendDetail?.error ?? err.message });
+    }
+    res.status(502).json({ ok: false, error: "No se pudo marcar como leída", detail: err.message });
   }
 });
 
