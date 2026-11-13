@@ -253,7 +253,7 @@ export default function CorregirReportePage() {
         alert('Guardado con advertencias:\n' + resultado.advertencias.map((a) => `- ${a.mensaje}`).join('\n'));
       }
 
-      navigate('/trabunda/mis-reportes');
+      navigate(-1);
     } catch (err) {
       alert('Error de red: ' + err.message);
     } finally {
@@ -512,7 +512,7 @@ export default function CorregirReportePage() {
 
             <div className="flex gap-2 mt-4">
               <button
-                onClick={() => navigate('/trabunda/mis-reportes')}
+                onClick={() => navigate(-1)}
                 className="flex-1 py-2 text-sm font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50"
               >
                 Descartar
