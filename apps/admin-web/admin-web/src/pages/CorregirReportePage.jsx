@@ -108,7 +108,9 @@ export default function CorregirReportePage() {
             horas: it.horas,
           },
         })));
-        const listaAreas = dashboard?.areas?.areas ?? dashboard?.areas?.data ?? [];
+        // GET /areas en Trabunda_Backend devuelve el arreglo directo (res.json(rows)),
+        // no envuelto en { areas } ni { data }.
+        const listaAreas = Array.isArray(dashboard?.areas) ? dashboard.areas : [];
         setAreas(listaAreas.filter((a) => a?.id != null && a?.nombre));
       } catch (e) {
         if (activo) setError(e.message);
