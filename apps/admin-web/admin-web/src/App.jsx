@@ -7,6 +7,7 @@ import TrabundaPage from './pages/TrabundaPage';
 import CorregirReportePage from './pages/CorregirReportePage';
 import MisReportesPage from './pages/MisReportesPage';
 import HistorialReportePage from './pages/HistorialReportePage';
+import CompararVersionesPage from './pages/CompararVersionesPage';
 import RutasPage    from './pages/RutasPage';
 import CalidadPage  from './pages/CalidadPage';
 import GuantesPage  from './pages/GuantesPage';
@@ -46,6 +47,11 @@ export default function App() {
           <Route path="/trabunda/reportes/:id/historial" element={
             <ProtectedRoute permission="trabunda">
               <HistorialReportePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/trabunda/reportes/:id/comparar" element={
+            <ProtectedRoute permission="trabunda">
+              <CompararVersionesPage />
             </ProtectedRoute>
           } />
 

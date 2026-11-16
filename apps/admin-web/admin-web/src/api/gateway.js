@@ -192,6 +192,10 @@ export function apiGetHistorialReporte(id) {
   return apiFetch(`/dashboard/trabunda/reportes/${id}/historial`);
 }
 
+export function apiGetVersionReporte(id, version) {
+  return apiFetch(`/dashboard/trabunda/reportes/${id}/version/${version}`);
+}
+
 export function apiRestaurarLinea(lineaId, motivoTexto) {
   return apiFetch(`/dashboard/trabunda/lineas/${lineaId}/restaurar`, {
     method: 'PATCH',

@@ -523,6 +523,24 @@ app.get("/dashboard/trabunda/reportes/:id/historial", verifyToken, requirePermis
   }
 });
 
+// ─── RECONSTRUIR UNA VERSIÓN PASADA (requiere permiso "trabunda") ────────────
+app.get("/dashboard/trabunda/reportes/:id/version/:version", verifyToken, requirePermission("trabunda"), async (req, res) => {
+  const base = process.env.TRABUNDA_BACKEND_URL;
+  if (!base || !process.env.TRABUNDA_ADMIN_USER) {
+    return res.status(503).json({ configured: false });
+  }
+  try {
+    const { id, version } = req.params;
+    const data = await fetchService(() => getTrabundaTokenForRequest(req), "trabunda", `${base}/reportes/${id}/version/${version}`);
+    res.json(data);
+  } catch (err) {
+    if (err.backendStatus) {
+      return res.status(err.backendStatus).json(err.backendDetail ?? { error: err.message });
+    }
+    res.status(502).json({ error: "No se pudo reconstruir la versión", detail: err.message });
+  }
+});
+
 // ─── RESTAURAR UNA LÍNEA QUITADA (requiere permiso "trabunda") ───────────────
 app.patch("/dashboard/trabunda/lineas/:lineaId/restaurar", verifyToken, requirePermission("trabunda"), async (req, res) => {
   const base = process.env.TRABUNDA_BACKEND_URL;

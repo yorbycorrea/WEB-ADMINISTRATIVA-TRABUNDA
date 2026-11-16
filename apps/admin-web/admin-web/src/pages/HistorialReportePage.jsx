@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, RotateCcw, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Download, RotateCcw, RefreshCw, AlertCircle, GitCompare, ChevronDown, ChevronRight } from 'lucide-react';
 import Layout from '../components/Layout';
-import { apiGetHistorialReporte, apiGetTrabundaReporteDetalle, apiRestaurarLinea } from '../api/gateway';
+import { apiGetHistorialReporte, apiGetTrabundaReporteDetalle, apiGetVersionReporte, apiRestaurarLinea } from '../api/gateway';
 import { exportReporteDetallePDF } from '../utils/exportUtils';
+
+const VERSIONES_EXPANDIDAS_POR_DEFECTO = 3;
 
 const ACCION_INFO = {
   AGREGAR: { label: '+ Agregado', color: 'text-emerald-600', avatar: 'bg-emerald-100 text-emerald-700' },
@@ -60,6 +62,8 @@ export default function HistorialReportePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [restaurando, setRestaurando] = useState(null);
+  const [descargandoOriginal, setDescargandoOriginal] = useState(false);
+  const [toggled, setToggled] = useState(new Set());
 
   async function cargar() {
     setLoading(true); setError(null);
@@ -90,6 +94,24 @@ export default function HistorialReportePage() {
     return [...mapa.entries()].sort((a, b) => b[0] - a[0]);
   }, [datos]);
 
+  // Las últimas N versiones se ven expandidas de entrada; las demás quedan
+  // colapsadas para que un reporte con muchas correcciones no sea una pared
+  // interminable de tarjetas. Un clic en el encabezado invierte el estado.
+  const defaultExpanded = useMemo(
+    () => new Set(grupos.slice(0, VERSIONES_EXPANDIDAS_POR_DEFECTO).map(([v]) => v)),
+    [grupos]
+  );
+  function estaExpandida(versionRep) {
+    return defaultExpanded.has(versionRep) !== toggled.has(versionRep);
+  }
+  function toggleExpandida(versionRep) {
+    setToggled((prev) => {
+      const next = new Set(prev);
+      if (next.has(versionRep)) next.delete(versionRep); else next.add(versionRep);
+      return next;
+    });
+  }
+
   async function handleRestaurar(lineaId) {
     if (!window.confirm('¿Restaurar a este trabajador en el reporte?')) return;
     setRestaurando(lineaId);
@@ -109,6 +131,18 @@ export default function HistorialReportePage() {
 
   function descargarPDFActual() {
     exportReporteDetallePDF(cabecera, contenido, tipo);
+  }
+
+  async function descargarPDFOriginal() {
+    setDescargandoOriginal(true);
+    try {
+      const data = await apiGetVersionReporte(id, 1);
+      exportReporteDetallePDF(data.cabecera, data.contenido, data.tipo);
+    } catch (err) {
+      alert('Error: ' + (err?.message ?? 'No se pudo reconstruir la versión original'));
+    } finally {
+      setDescargandoOriginal(false);
+    }
   }
 
   if (loading) {
@@ -145,10 +179,18 @@ export default function HistorialReportePage() {
           </div>
           <div className="flex gap-2">
             <button
-              disabled title="Requiere reconstruir el snapshot histórico (pendiente, Fase 3)"
-              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-slate-100 text-slate-400 rounded-xl cursor-not-allowed"
+              onClick={() => navigate(`/trabunda/reportes/${datos.reporte_id}/comparar`)}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-violet-100 text-violet-700 rounded-xl hover:bg-violet-200"
             >
-              <Download size={13} /> PDF original (v1)
+              <GitCompare size={13} /> Comparar versiones
+            </button>
+            <button
+              disabled={descargandoOriginal}
+              onClick={descargarPDFOriginal}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 disabled:opacity-50"
+            >
+              {descargandoOriginal ? <RefreshCw size={13} className="animate-spin" /> : <Download size={13} />}
+              PDF original (v1)
             </button>
             <button
               onClick={descargarPDFActual}
@@ -165,11 +207,19 @@ export default function HistorialReportePage() {
           </div>
         )}
 
-        {grupos.map(([versionRep, eventos]) => (
+        {grupos.map(([versionRep, eventos]) => {
+          const expandida = estaExpandida(versionRep);
+          return (
           <div key={versionRep} className="bg-white rounded-2xl border border-slate-200 p-5">
-            <div className="text-xs font-bold text-violet-600 uppercase tracking-wider mb-4">
+            <button
+              onClick={() => toggleExpandida(versionRep)}
+              className="flex items-center gap-1.5 text-xs font-bold text-violet-600 uppercase tracking-wider mb-4 w-full"
+            >
+              {expandida ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               Versión {versionRep}
-            </div>
+              <span className="font-normal normal-case text-slate-400">({eventos.length} cambio{eventos.length !== 1 ? 's' : ''})</span>
+            </button>
+            {expandida && (
             <div className="space-y-5">
               {eventos.map((ev) => {
                 const info = ACCION_INFO[ev.accion] ?? ACCION_INFO.EDITAR;
@@ -215,8 +265,10 @@ export default function HistorialReportePage() {
                 );
               })}
             </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </Layout>
   );

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Download, Pencil, AlertCircle } from 'lucide-react';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
 import { apiGetTrabundaReportes, apiGetTrabundaReporteDetalle } from '../api/gateway';
 import { exportReporteDetallePDF } from '../utils/exportUtils';
 import { calcularPlazo } from '../utils/plazoCorreccion';
@@ -32,6 +33,8 @@ function VersionBadge({ version }) {
 
 export default function MisReportesPage() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const esPlanillero = hasPermission('trabunda_planillero');
   const [fecha, setFecha] = useState(hoy());
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +153,7 @@ export default function MisReportesPage() {
                             {descargando === r.id ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
                             PDF
                           </button>
+                          {esPlanillero && (
                           <button
                             onClick={() => accion.solicitar
                               ? alert('TODO: falta el flujo de "solicitar a supervisor" — todavía no hay endpoint para esto.')
@@ -160,6 +164,7 @@ export default function MisReportesPage() {
                             {!accion.solicitar && <Pencil size={11} />}
                             {accion.label}
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>

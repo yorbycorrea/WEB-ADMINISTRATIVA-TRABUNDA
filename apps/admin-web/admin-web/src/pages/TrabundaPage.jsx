@@ -267,6 +267,8 @@ function fmtFecha(val) {
 
 function TabReportes() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const esPlanillero = hasPermission('trabunda_planillero');
   const [fecha,   setFecha]   = useState(hoy());
   const [tipo,    setTipo]    = useState('');
   const [turno,   setTurno]   = useState('');
@@ -554,20 +556,22 @@ function TabReportes() {
                           }
                           PDF
                         </button>
-                        <button
-                          disabled={corrigiendoLoading === reporte.id}
-                          onClick={() => navigate(`/trabunda/mis-reportes/${reporte.id}/corregir`)}
-                          title={`Corregir  reporte #${reporte.id}`}
-                          className='inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all'
-                          >
-                            {corrigiendoLoading === reporte.id
-                              ? <RefreshCw size={11} className='animate-spin'/>
-                              : <Pencil size={11}/>
-                            }
+                        {esPlanillero && (
+                          <button
+                            disabled={corrigiendoLoading === reporte.id}
+                            onClick={() => navigate(`/trabunda/mis-reportes/${reporte.id}/corregir`)}
+                            title={`Corregir  reporte #${reporte.id}`}
+                            className='inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all'
+                            >
+                              {corrigiendoLoading === reporte.id
+                                ? <RefreshCw size={11} className='animate-spin'/>
+                                : <Pencil size={11}/>
+                              }
 
-                            Corregir
+                              Corregir
 
-                        </button>
+                          </button>
+                        )}
                         <button
                           onClick={() => navigate(`/trabunda/reportes/${reporte.id}/historial`)}
                           title={`Historial del reporte #${reporte.id}`}
