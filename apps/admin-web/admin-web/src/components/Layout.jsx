@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Activity, Settings,
-  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical, Moon, Sun, Hand, Bell
+  ShieldCheck, LogOut, ChevronRight, Users, FlaskConical, Moon, Sun, Hand, Bell, Check, CheckCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiGetNotificaciones, apiGetNotificacionesNoLeidasCount, apiMarcarNotificacionLeida } from '../api/gateway';
@@ -112,6 +112,27 @@ export default function Layout({ children, title, subtitle }) {
     navigate(`/trabunda/reportes/${n.reporte_id}/historial`);
   }
 
+  // Marca como leída sin navegar — para cuando solo quieres limpiar el aviso.
+  async function handleMarcarLeida(n, event) {
+    event.stopPropagation();
+    if (n.leida) return;
+    try {
+      await apiMarcarNotificacionLeida(n.id);
+    } catch (_) {}
+    setNotificaciones((prev) => prev.map((item) => (item.id === n.id ? { ...item, leida: true } : item)));
+    setUnreadCount((c) => Math.max(c - 1, 0));
+  }
+
+  async function handleMarcarTodas() {
+    const pendientes = notificaciones.filter((n) => !n.leida);
+    if (pendientes.length === 0) return;
+    try {
+      await Promise.all(pendientes.map((n) => apiMarcarNotificacionLeida(n.id)));
+    } catch (_) {}
+    setNotificaciones((prev) => prev.map((item) => ({ ...item, leida: true })));
+    setUnreadCount(0);
+  }
+
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 transition-colors duration-200">
 
@@ -201,8 +222,16 @@ export default function Layout({ children, title, subtitle }) {
 
                 {notifPanel && (
                   <div className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-slate-100 font-bold text-sm text-slate-700">
-                      Notificaciones
+                    <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                      <span className="font-bold text-sm text-slate-700">Notificaciones</span>
+                      {notificaciones.some((n) => !n.leida) && (
+                        <button
+                          onClick={handleMarcarTodas}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                        >
+                          <CheckCheck size={13} /> Marcar todas
+                        </button>
+                      )}
                     </div>
                     <div className="max-h-80 overflow-y-auto">
                       {loadingNotifs ? (
@@ -211,17 +240,28 @@ export default function Layout({ children, title, subtitle }) {
                         <div className="p-6 text-center text-slate-400 text-sm">Sin notificaciones</div>
                       ) : (
                         notificaciones.map((n) => (
-                          <button
+                          <div
                             key={n.id}
                             onClick={() => handleClickNotificacion(n)}
-                            className={`w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-all ${!n.leida ? 'bg-blue-50/50' : ''}`}
+                            className={`w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-all cursor-pointer flex items-start gap-2 ${!n.leida ? 'bg-blue-50/50' : ''}`}
                           >
-                            <p className="text-sm font-semibold text-slate-800">{n.titulo}</p>
-                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.cuerpo}</p>
-                            <p className="text-[10px] text-slate-400 mt-1">
-                              {new Date(n.created_at).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
-                            </p>
-                          </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-800">{n.titulo}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.cuerpo}</p>
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                {new Date(n.created_at).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}
+                              </p>
+                            </div>
+                            {!n.leida && (
+                              <button
+                                onClick={(e) => handleMarcarLeida(n, e)}
+                                title="Marcar como leído"
+                                className="flex-shrink-0 w-6 h-6 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-all"
+                              >
+                                <Check size={14} />
+                              </button>
+                            )}
+                          </div>
                         ))
                       )}
                     </div>
