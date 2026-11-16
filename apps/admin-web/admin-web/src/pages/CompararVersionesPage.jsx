@@ -5,10 +5,10 @@ import Layout from '../components/Layout';
 import { apiGetHistorialReporte, apiGetVersionReporte } from '../api/gateway';
 
 const ESTADO_INFO = {
-  NUEVO:   { label: 'nuevo en B',   bg: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700' },
-  QUITADO: { label: 'quitado en B', bg: 'bg-red-50',     badge: 'bg-red-100 text-red-700' },
-  EDITADO: { label: 'editado',      bg: 'bg-amber-50',   badge: 'bg-amber-100 text-amber-700' },
-  IGUAL:   { label: 'sin cambios',  bg: '',              badge: 'bg-slate-100 text-slate-500' },
+  NUEVO:   { label: 'nuevo en B',   bg: 'bg-emerald-50', texto: 'text-emerald-900', tachado: 'text-emerald-500', badge: 'bg-emerald-100 text-emerald-700' },
+  QUITADO: { label: 'quitado en B', bg: 'bg-red-50',     texto: 'text-red-900',     tachado: 'text-red-400',     badge: 'bg-red-100 text-red-700' },
+  EDITADO: { label: 'editado',      bg: 'bg-amber-50',   texto: 'text-amber-900',   tachado: 'text-amber-600',   badge: 'bg-amber-100 text-amber-700' },
+  IGUAL:   { label: 'sin cambios',  bg: '',              texto: 'text-slate-800',   tachado: 'text-slate-400',   badge: 'bg-slate-100 text-slate-500' },
 };
 
 function fmtFecha(iso) {
@@ -215,28 +215,28 @@ export default function CompararVersionesPage() {
                 const mostrar = quitado ? f.a : f.b;
                 return (
                   <tr key={f.codigo} className={info.bg}>
-                    <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{f.codigo}</td>
-                    <td className={`px-4 py-2.5 ${quitado ? 'line-through text-slate-400' : 'text-slate-800 font-medium'}`}>{mostrar?.trabajador_nombre}</td>
-                    <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{mostrar?.area_nombre ?? '—'}</td>
+                    <td className={`px-4 py-2.5 ${quitado ? `line-through ${info.tachado}` : info.texto}`}>{f.codigo}</td>
+                    <td className={`px-4 py-2.5 font-medium ${quitado ? `line-through ${info.tachado}` : info.texto}`}>{mostrar?.trabajador_nombre}</td>
+                    <td className={`px-4 py-2.5 ${quitado ? `line-through ${info.tachado}` : info.texto}`}>{mostrar?.area_nombre ?? '—'}</td>
                     {f.estado === 'EDITADO' ? (
                       <>
-                        <td className="px-4 py-2.5 text-slate-600">{f.b.hora_inicio}</td>
+                        <td className={`px-4 py-2.5 ${info.texto}`}>{f.b.hora_inicio}</td>
                         <td className="px-4 py-2.5">
                           {f.a.hora_fin !== f.b.hora_fin ? (
-                            <><span className="line-through text-slate-400">{f.a.hora_fin}</span> → <span className="font-medium text-slate-800">{f.b.hora_fin}</span></>
-                          ) : f.b.hora_fin}
+                            <><span className={`line-through ${info.tachado}`}>{f.a.hora_fin}</span> → <span className={`font-medium ${info.texto}`}>{f.b.hora_fin}</span></>
+                          ) : <span className={info.texto}>{f.b.hora_fin}</span>}
                         </td>
                         <td className="px-4 py-2.5">
                           {f.a.horas !== f.b.horas ? (
-                            <><span className="line-through text-slate-400">{f.a.horas}</span> → <span className="font-medium text-slate-800">{f.b.horas}</span></>
-                          ) : f.b.horas}
+                            <><span className={`line-through ${info.tachado}`}>{f.a.horas}</span> → <span className={`font-medium ${info.texto}`}>{f.b.horas}</span></>
+                          ) : <span className={info.texto}>{f.b.horas}</span>}
                         </td>
                       </>
                     ) : (
                       <>
-                        <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{mostrar?.hora_inicio}</td>
-                        <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{mostrar?.hora_fin}</td>
-                        <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{mostrar?.horas}</td>
+                        <td className={`px-4 py-2.5 ${quitado ? `line-through ${info.tachado}` : info.texto}`}>{mostrar?.hora_inicio}</td>
+                        <td className={`px-4 py-2.5 ${quitado ? `line-through ${info.tachado}` : info.texto}`}>{mostrar?.hora_fin}</td>
+                        <td className={`px-4 py-2.5 ${quitado ? `line-through ${info.tachado}` : info.texto}`}>{mostrar?.horas}</td>
                       </>
                     )}
                     <td className="px-4 py-2.5">
