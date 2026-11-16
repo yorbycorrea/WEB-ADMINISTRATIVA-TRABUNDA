@@ -5,10 +5,10 @@ import Layout from '../components/Layout';
 import { apiGetHistorialReporte, apiGetVersionReporte } from '../api/gateway';
 
 const ESTADO_INFO = {
-  NUEVO:   { label: 'nuevo en B',   bg: '#ECFDF5', badge: 'bg-emerald-100 text-emerald-700' },
-  QUITADO: { label: 'quitado en B', bg: '#FEF2F2', badge: 'bg-red-100 text-red-700' },
-  EDITADO: { label: 'editado',      bg: '#FFFBEB', badge: 'bg-amber-100 text-amber-700' },
-  IGUAL:   { label: 'sin cambios',  bg: '',        badge: 'bg-slate-100 text-slate-500' },
+  NUEVO:   { label: 'nuevo en B',   bg: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700' },
+  QUITADO: { label: 'quitado en B', bg: 'bg-red-50',     badge: 'bg-red-100 text-red-700' },
+  EDITADO: { label: 'editado',      bg: 'bg-amber-50',   badge: 'bg-amber-100 text-amber-700' },
+  IGUAL:   { label: 'sin cambios',  bg: '',              badge: 'bg-slate-100 text-slate-500' },
 };
 
 function fmtFecha(iso) {
@@ -214,7 +214,7 @@ export default function CompararVersionesPage() {
                 const quitado = f.estado === 'QUITADO';
                 const mostrar = quitado ? f.a : f.b;
                 return (
-                  <tr key={f.codigo} style={{ background: info.bg || undefined }}>
+                  <tr key={f.codigo} className={info.bg}>
                     <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{f.codigo}</td>
                     <td className={`px-4 py-2.5 ${quitado ? 'line-through text-slate-400' : 'text-slate-800 font-medium'}`}>{mostrar?.trabajador_nombre}</td>
                     <td className={`px-4 py-2.5 text-slate-600 ${quitado ? 'line-through text-slate-400' : ''}`}>{mostrar?.area_nombre ?? '—'}</td>
